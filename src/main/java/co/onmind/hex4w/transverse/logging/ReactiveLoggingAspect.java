@@ -51,7 +51,7 @@ public class ReactiveLoggingAspect {
      * @return the method result (potentially wrapped for reactive types)
      * @throws Throwable if the method execution fails
      */
-    @Around("execution(* co.onmind.hex4jwebflux.domain.services..*(..))")
+    @Around("execution(* co.onmind.hex4w.domain.services..*(..))")
     public Object logServiceMethods(ProceedingJoinPoint joinPoint) throws Throwable {
         return logMethodExecution(joinPoint, "SERVICE");
     }
@@ -66,7 +66,7 @@ public class ReactiveLoggingAspect {
      * @return the method result (potentially wrapped for reactive types)
      * @throws Throwable if the method execution fails
      */
-    @Around("execution(* co.onmind.hex4jwebflux.application.usecases..*(..))")
+    @Around("execution(* co.onmind.hex4w.application.usecases..*(..))")
     public Object logUseCaseMethods(ProceedingJoinPoint joinPoint) throws Throwable {
         return logMethodExecution(joinPoint, "USE_CASE");
     }
@@ -81,7 +81,7 @@ public class ReactiveLoggingAspect {
      * @return the method result (potentially wrapped for reactive types)
      * @throws Throwable if the method execution fails
      */
-    @Around("execution(* co.onmind.hex4jwebflux.infrastructure.persistence.adapters..*(..))")
+    @Around("execution(* co.onmind.hex4w.infrastructure.persistence.adapters..*(..))")
     public Object logRepositoryMethods(ProceedingJoinPoint joinPoint) throws Throwable {
         return logMethodExecution(joinPoint, "REPOSITORY");
     }
@@ -194,7 +194,7 @@ public class ReactiveLoggingAspect {
         
         // Log stack trace for unexpected errors
         if (!(error instanceof IllegalArgumentException) && 
-            !error.getClass().getPackage().getName().contains("co.onmind.hex4jwebflux.domain.exceptions")) {
+            !error.getClass().getPackage().getName().contains("co.onmind.hex4w.domain.exceptions")) {
             logger.error("Stack trace:", error);
         }
     }

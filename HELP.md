@@ -317,7 +317,7 @@ dependencies {
 ```yaml
 spring:
   r2dbc:
-    url: r2dbc:h2:mem:///hex4jwebflux;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: r2dbc:h2:mem:///hex4w;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password: password
 ```

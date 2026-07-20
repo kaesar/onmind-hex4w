@@ -7,7 +7,7 @@ spring:
   
   # R2DBC H2 Database configuration
   r2dbc:
-    url: r2dbc:h2:mem:///hex4jwebflux;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: r2dbc:h2:mem:///hex4w;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
     password: password
   
@@ -61,7 +61,7 @@ management:
 logging:
   level:
     root: INFO
-    co.onmind.hex4jwebflux: DEBUG
+    co.onmind.hex4w: DEBUG
     org.springframework.r2dbc: DEBUG
     io.r2dbc.h2: DEBUG
     org.springframework.web.reactive: INFO
@@ -77,7 +77,7 @@ spring:
       
 logging:
   level:
-    co.onmind.hex4jwebflux: DEBUG
+    co.onmind.hex4w: DEBUG
 
 ---
 spring:
@@ -91,7 +91,7 @@ spring:
 logging:
   level:
     root: WARN
-    co.onmind.hex4jwebflux: INFO
+    co.onmind.hex4w: INFO
 
 ---
 spring:
@@ -102,4 +102,4 @@ spring:
 logging:
   level:
     root: WARN
-    co.onmind.hex4jwebflux: INFO
+    co.onmind.hex4w: INFO

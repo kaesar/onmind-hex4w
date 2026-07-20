@@ -2,7 +2,6 @@ package co.onmind.hex4w;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 
 /**
  * Main Spring Boot WebFlux application class for the Hexagonal Architecture Reactive Template.
@@ -22,7 +21,6 @@ import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
  * @version 1.0.0
  */
 @SpringBootApplication
-@EnableR2dbcRepositories(basePackages = "co.onmind.hex4jwebflux.infrastructure.persistence.repositories")
 public class MicroHexApplication {
 
     public static void main(String[] args) {
