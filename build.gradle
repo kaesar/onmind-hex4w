@@ -46,7 +46,9 @@ dependencies {
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:netty-nio-client'
 
-    // GraalVM JavaScript is included in JDK 21+ (no external deps needed)
+    // GraalVM Polyglot SDK for sandboxed JavaScript execution
+    implementation 'org.graalvm.polyglot:polyglot:24.1.1'
+    implementation 'org.graalvm.polyglot:js:24.1.1'
 
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'

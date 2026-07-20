@@ -5,7 +5,7 @@ import co.onmind.hex4w.domain.models.Role;
 import co.onmind.hex4w.infrastructure.persistence.entities.RoleEntity;
 import co.onmind.hex4w.infrastructure.persistence.mappers.RoleEntityMapper;
 import co.onmind.hex4w.infrastructure.persistence.repositories.R2dbcRoleRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -30,7 +30,7 @@ import java.time.LocalDateTime;
  * @version 1.0.0
  * @since 1.0.0
  */
-@Repository
+@Component
 public class RoleRepositoryAdapter implements RoleRepositoryPort {
     
     private final R2dbcRoleRepository r2dbcRepository;

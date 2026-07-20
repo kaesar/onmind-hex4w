@@ -50,7 +50,7 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 │   │   └── repositories/    # Repositorios R2DBC
 │   └── webclients/          # Clientes web reactivos para servicios externos
 └── transverse/              # Componentes Transversales
-    ├── exceptions/          # Manejo global de errores reactivo
+    ├── exceptions/          # Manejo global de errores reactivo (GlobalErrorHandler)
     └── logging/             # Aspectos de logging reactivos
 ```
 
@@ -147,6 +147,52 @@ sequenceDiagram
 - **Backpressure**: Manejo automático de contrapresión
 - **Error Handling**: Manejo reactivo de errores con `onErrorResume`
 - **Composition**: Composición de operaciones reactivas con `flatMap`, `map`, etc.
+
+### 3. Manejo de Errores (GlobalErrorHandler vs. Handlers)
+
+La plantilla cuenta con **dos capas** de manejo de errores que conviven, y es
+importante entender cuándo actúa cada una:
+
+#### a) `GlobalErrorHandler` (centralizado)
+Ubicado en `transverse/exceptions/GlobalErrorHandler.java`, implementa
+`ErrorWebExceptionHandler` con `@Order(-2)`. Intercepta **cualquier excepción no
+capturada** en el pipeline de WebFlux y la convierte en una respuesta JSON
+estándar con 5 campos: `code`, `message`, `status`, `timestamp` y `path`.
+
+Mapeo de excepciones a HTTP status:
+
+| Excepción | HTTP Status | code |
+|---|---|---|
+| `DuplicateRoleException` | 409 CONFLICT | `DUPLICATE_ROLE` |
+| `RoleNotFoundException` | 404 NOT_FOUND | `ROLE_NOT_FOUND` |
+| `IllegalArgumentException` | 400 BAD_REQUEST | `INVALID_REQUEST` |
+| `JsonProcessingException` | 400 BAD_REQUEST | `INVALID_JSON` |
+| Cualquier otra | 500 INTERNAL_SERVER_ERROR | `INTERNAL_ERROR` |
+
+#### b) `handleError` por Handler (frontera)
+Cada handler en `infrastructure/handlers/` (p. ej. `RoleHandler`,
+`ScriptingHandler`, `StoreHandler`) implementa su propio
+`.onErrorResume(this::handleError)` y un `record ErrorResponse` local de **3
+campos** (`code`, `message`, `status`). Esta capa captura el error **dentro del
+flujo reactivo del handler**, antes de que llegue al `GlobalErrorHandler`.
+
+#### ¿Por qué existen ambas y cuál predomina?
+- En la **aplicación en ejecución**, la excepción se resuelve en el primer
+  `onErrorResume` que la intercepte. Si el handler la maneja, se usa el formato
+  de 3 campos; si no, la excepción sube y el `GlobalErrorHandler` la formatea
+  con 5 campos.
+- En los **tests aislados de handler** (`*WebFluxIntegrationTest`), el
+  `WebTestClient` se construye manualmente solo con el handler y el
+  `RouterFunction`, **sin** registrar el `GlobalErrorHandler` en el pipeline. Por
+  lo tanto, en ese contexto el `GlobalErrorHandler` no interviene y el
+  `handleError` del handler es la única fuente de mapeo de errores. Es por eso
+  que los handlers mantienen su propio `handleError` y no delegan todo al
+  centralizado.
+
+> **Nota de diseño:** Si en el futuro se quiere unificar en el `GlobalErrorHandler`,
+> habría que registrarlo también en los `WebTestClient` de los tests de handler
+> (o migrar esos tests a `@WebFluxTest` con el contexto completo), y unificar el
+> formato de `ErrorResponse` en un único record compartido.
 
 ## Inicio Rápido
 
