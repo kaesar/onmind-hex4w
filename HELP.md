@@ -2,7 +2,7 @@
 
 Una implementación completa de arquitectura hexagonal (patrón Ports and Adapters) utilizando Spring Boot WebFlux para programación reactiva.
 
-## 🚀 Características
+## Características
 
 - **Programación Reactiva**: Construido con Spring Boot WebFlux para operaciones no bloqueantes y reactivas
 - **Arquitectura Hexagonal**: Separación clara de responsabilidades con capas de dominio, aplicación e infraestructura
@@ -13,23 +13,25 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **Manejo de Errores Reactivo**: Manejo centralizado de excepciones con GlobalErrorHandler
 - **Logging Reactivo**: Aspectos de logging adaptados para programación reactiva
 
-## 📋 Requisitos Previos
+## Requisitos Previos
 
 - **Java 21** o superior
 - **Gradle 8.7** o superior
 - **Git** para clonar el repositorio
 
-## 🏗️ Arquitectura Hexagonal Reactiva
+## Arquitectura Hexagonal Reactiva
 
 ### Estructura de Paquetes
 
 ```
-co.onmind.hex4jwebflux/
-├── domain/                    # Capa de Dominio (Core Business Logic)
-│   ├── models/               # Entidades de dominio
-│   ├── services/             # Servicios de dominio reactivos
-│   └── exceptions/           # Excepciones de dominio
-├── application/              # Capa de Aplicación (Use Cases)
+  __________________
+./ co.onmind.hex4w /
+│
+├── domain/                  # Capa de Dominio (Core Business Logic)
+│   ├── models/              # Entidades de dominio
+│   ├── services/            # Servicios de dominio reactivos
+│   └── exceptions/          # Excepciones de dominio
+├── application/             # Capa de Aplicación (Use Cases)
 │   ├── dto/
 │   │   ├── in/              # DTOs de entrada
 │   │   └── out/             # DTOs de salida
@@ -98,7 +100,7 @@ graph TB
     class HANDLER,R2DBC,CONFIG,WEBCLIENT infrastructure
 ```
 
-## 🔄 Flujo Reactivo Completo del Ejemplo Role
+## Flujo Reactivo Completo del Ejemplo Role
 
 ### 1. Flujo de Creación de Role
 
@@ -146,14 +148,14 @@ sequenceDiagram
 - **Error Handling**: Manejo reactivo de errores con `onErrorResume`
 - **Composition**: Composición de operaciones reactivas con `flatMap`, `map`, etc.
 
-## 🚀 Inicio Rápido
+## Inicio Rápido
 
 ### Instalación y Ejecución
 
 1. **Clonar el repositorio**:
 ```bash
-git clone <repository-url>
-cd hex4j-webflux
+git clone https://github.com/kaesar/onmind-hex4w.git hex4w
+cd hex4w
 ```
 
 2. **Ejecutar la aplicación**:
@@ -184,16 +186,18 @@ curl http://localhost:8080/actuator/health
 ./gradlew test --tests "*IntegrationTest"
 ```
 
-## 🌐 API Endpoints
+## API Endpoints
 
 ### Endpoints Reactivos Disponibles
 
 | Método | Endpoint | Descripción | Request Body | Response |
 |--------|----------|-------------|--------------|----------|
 | `POST` | `/api/v1/roles` | Crear un nuevo role | `CreateRoleRequestDto` | `RoleResponseDto` |
-| `GET` | `/api/v1/roles` | Obtener todos los roles | - | `Flux<RoleResponseDto>` |
-| `GET` | `/api/v1/roles/{id}` | Obtener role por ID | - | `RoleResponseDto` |
-| `GET` | `/api/v1/roles/search?name={pattern}` | Buscar roles por patrón de nombre | - | `Flux<RoleResponseDto>` |
+| `GET`  | `/api/v1/roles` | Obtener todos los roles | - | `Flux<RoleResponseDto>` |
+| `GET`  | `/api/v1/roles/{id}` | Obtener role por ID | - | `RoleResponseDto` |
+| `GET`  | `/api/v1/roles/search?name={pattern}` | Buscar roles por patrón de nombre | - | `Flux<RoleResponseDto>` |
+| `POST` | `/api/v1/scripts/execute` | Ejecutar script JavaScript con GraalVM | `ExecuteScriptRequestDto` | `ScriptResultResponseDto` |
+| `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
 
 ### Ejemplos de Uso
 
@@ -244,7 +248,40 @@ curl http://localhost:8080/api/v1/roles/1
 curl "http://localhost:8080/api/v1/roles/search?name=ADM"
 ```
 
-## ⚙️ Configuración
+#### Ejecutar Script JavaScript (GraalVM)
+```bash
+curl -X POST http://localhost:8080/api/v1/scripts/execute \
+  -H "Content-Type: application/json" \
+  -d '{"script": "console.log(\"Hello from GraalJS!\"); 40 + 2"}'
+```
+
+**Respuesta**:
+```json
+{
+  "value": 42,
+  "stdout": "Hello from GraalJS!\n",
+  "stderr": ""
+}
+```
+
+#### Listar Objetos de un Bucket S3
+```bash
+curl "http://localhost:8080/api/v1/store/items?bucket=my-bucket"
+```
+
+**Respuesta**:
+```json
+[
+  {
+    "key": "documents/report.pdf",
+    "size": 102400,
+    "lastModified": "2024-01-15T10:30:00",
+    "eTag": "\"d41d8cd98f00b204e9800998ecf8427e\""
+  }
+]
+```
+
+## Configuración
 
 ### Dependencias Reactivas Principales
 
@@ -296,7 +333,7 @@ spring:
     base-path: /api/v1
 ```
 
-## 🧪 Testing Reactivo
+## Testing Reactivo
 
 ### Estrategia de Testing
 
@@ -367,11 +404,11 @@ class RoleHandlerTest {
 }
 ```
 
-## 🔧 Desarrollo y Extensión
+## Desarrollo y Extensión
 
 ### Diferencias Clave con hex4j (Spring MVC)
 
-| Aspecto | hex4j (Spring MVC) | hex4j-webflux (WebFlux) |
+| Aspecto | hex4j (Spring MVC) | hex4w (WebFlux) |
 |---------|-------------------|-------------------------|
 | **Framework** | Spring MVC | Spring WebFlux |
 | **Modelo de Programación** | Imperativo/Bloqueante | Reactivo/No-bloqueante |
@@ -571,7 +608,7 @@ public class UserRouterConfiguration {
 5. **Backpressure**: Considerar estrategias de backpressure para streams grandes
 6. **Schedulers**: Usar schedulers apropiados para operaciones CPU-intensivas
 
-## 📊 Monitoreo y Observabilidad
+## Monitoreo y Observabilidad
 
 ### Endpoints de Actuator
 
@@ -588,25 +625,7 @@ El proyecto incluye logging reactivo configurado:
 ```yaml
 logging:
   level:
-    co.onmind.hex4jwebflux: DEBUG
+    co.onmind.hex4w: DEBUG
     org.springframework.r2dbc: DEBUG
     reactor.netty: INFO
 ```
-
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 👥 Autores
-
-- **OnMind (Cesar Andres Arcila Buitrago)** - *Desarrollo inicial* - [GitHub](https://github.com/onmind)
-
-## 🙏 Agradecimientos
-
-- Inspirado en los principios de Arquitectura Hexagonal de Alistair Cockburn
-- Basado en los patrones de Domain-Driven Design de Eric Evans
-- Implementado con Spring Boot WebFlux para programación reactiva

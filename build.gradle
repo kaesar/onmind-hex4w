@@ -1,7 +1,7 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.2.0'
-    id 'io.spring.dependency-management' version '1.1.4'
+    id 'org.springframework.boot' version '3.5.14'
+    id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'co.onmind'
@@ -9,6 +9,9 @@ version = '0.0.1-SNAPSHOT'
 
 java {
     sourceCompatibility = '21'
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 configurations {
@@ -19,6 +22,7 @@ configurations {
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo1.maven.org/maven2' }
 }
 
 dependencies {
@@ -27,22 +31,27 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
     // R2DBC H2 Database
     runtimeOnly 'com.h2database:h2'
     runtimeOnly 'io.r2dbc:r2dbc-h2'
-    
+
     // MapStruct for object mapping
     implementation 'org.mapstruct:mapstruct:1.5.5.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
-    
-    // AspectJ for logging aspects
-    implementation 'org.springframework.boot:spring-boot-starter-aop'
-    
+
+    // AWS S3 SDK v2 for reactive S3 operations
+    implementation platform('software.amazon.awssdk:bom:2.25.27')
+    implementation 'software.amazon.awssdk:s3'
+    implementation 'software.amazon.awssdk:netty-nio-client'
+
+    // GraalVM JavaScript is included in JDK 21+ (no external deps needed)
+
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
-    
+
     // Testing dependencies (reactive)
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'io.projectreactor:reactor-test'
