@@ -1,8 +1,8 @@
 package co.onmind.hex4w.infrastructure.handlers;
 
 import co.onmind.hex4w.application.dto.in.ExecuteScriptRequestDto;
-import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import co.onmind.hex4w.application.ports.in.ExecuteScriptTrait;
+import co.onmind.hex4w.domain.exceptions.ScriptNotAllowedException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.http.HttpStatus;
@@ -51,6 +51,16 @@ public class ScriptingHandler {
     }
 
     private Mono<ServerResponse> handleError(Throwable throwable) {
+        if (throwable instanceof ScriptNotAllowedException) {
+            return ServerResponse.status(HttpStatus.FORBIDDEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(new ErrorResponse(
+                    "SCRIPT_NOT_ALLOWED",
+                    throwable.getMessage(),
+                    HttpStatus.FORBIDDEN.value()
+                ));
+        }
+
         if (throwable instanceof IllegalArgumentException) {
             return ServerResponse.status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)

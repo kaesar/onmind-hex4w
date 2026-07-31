@@ -48,6 +48,7 @@ public class GraalJsAdapter implements ScriptingPort {
                 .allowHostClassLoading(false)
                 .allowHostClassLookup(className -> false)
                 .option("js.ecmascript-version", "2023")
+                .allowExperimentalOptions(true)
                 .option("js.timezone", "UTC")
                 .build()) {
 

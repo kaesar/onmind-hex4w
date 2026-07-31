@@ -1,4 +1,4 @@
-# Hex4j WebFlux - Plantilla de Arquitectura Hexagonal Reactiva
+# Hex4WebFlux (hex4w) - Plantilla de Arquitectura Hexagonal Reactiva
 
 Una implementación completa de arquitectura hexagonal (patrón Ports and Adapters) utilizando Spring Boot WebFlux para programación reactiva.
 
@@ -153,7 +153,7 @@ sequenceDiagram
 La plantilla cuenta con **dos capas** de manejo de errores que conviven, y es
 importante entender cuándo actúa cada una:
 
-#### a) `GlobalErrorHandler` (centralizado)
+#### a. `GlobalErrorHandler` (centralizado)
 Ubicado en `transverse/exceptions/GlobalErrorHandler.java`, implementa
 `ErrorWebExceptionHandler` con `@Order(-2)`. Intercepta **cualquier excepción no
 capturada** en el pipeline de WebFlux y la convierte en una respuesta JSON
@@ -165,11 +165,12 @@ Mapeo de excepciones a HTTP status:
 |---|---|---|
 | `DuplicateRoleException` | 409 CONFLICT | `DUPLICATE_ROLE` |
 | `RoleNotFoundException` | 404 NOT_FOUND | `ROLE_NOT_FOUND` |
+| `ScriptNotAllowedException` | 403 FORBIDDEN | `SCRIPT_NOT_ALLOWED` |
 | `IllegalArgumentException` | 400 BAD_REQUEST | `INVALID_REQUEST` |
 | `JsonProcessingException` | 400 BAD_REQUEST | `INVALID_JSON` |
 | Cualquier otra | 500 INTERNAL_SERVER_ERROR | `INTERNAL_ERROR` |
 
-#### b) `handleError` por Handler (frontera)
+#### b. `handleError` por Handler (frontera)
 Cada handler en `infrastructure/handlers/` (p. ej. `RoleHandler`,
 `ScriptingHandler`, `StoreHandler`) implementa su propio
 `.onErrorResume(this::handleError)` y un `record ErrorResponse` local de **3
@@ -242,7 +243,7 @@ curl http://localhost:8080/actuator/health
 | `GET`  | `/api/v1/roles` | Obtener todos los roles | - | `Flux<RoleResponseDto>` |
 | `GET`  | `/api/v1/roles/{id}` | Obtener role por ID | - | `RoleResponseDto` |
 | `GET`  | `/api/v1/roles/search?name={pattern}` | Buscar roles por patrón de nombre | - | `Flux<RoleResponseDto>` |
-| `POST` | `/api/v1/scripts/execute` | Ejecutar script JavaScript con GraalVM | `ExecuteScriptRequestDto` | `ScriptResultResponseDto` |
+| `POST` | `/api/v1/scripts/execute` | Ejecutar archivo `.js` whitelisteado (GraalJS) | `{ "script": "hello.js" }` | `ScriptResultResponseDto` |
 | `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
 
 ### Ejemplos de Uso
@@ -294,21 +295,37 @@ curl http://localhost:8080/api/v1/roles/1
 curl "http://localhost:8080/api/v1/roles/search?name=ADM"
 ```
 
-#### Ejecutar Script JavaScript (GraalVM)
+#### Ejecutar Script JavaScript (archivo whitelisteado)
+
+Ruta: `POST /api/v1/scripts/execute`  
+Body: `{ "script": "<nombre-archivo.js>" }` → `{ value, stdout, stderr }`
+
+Solo se ejecutan archivos listados en el enum `AllowedScript` y presentes en
+`src/main/resources/scripts/` (config: `app.scripts.location`).
+
+| Archivo | Enum |
+|---------|------|
+| `hello.js` | `AllowedScript.HELLO` |
+| `example.js` | `AllowedScript.EXAMPLE` |
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/scripts/execute \
   -H "Content-Type: application/json" \
-  -d '{"script": "console.log(\"Hello from GraalJS!\"); 40 + 2"}'
+  -d '{"script": "hello.js"}'
 ```
 
-**Respuesta**:
+**Respuesta** (ejemplo):
 ```json
 {
-  "value": 42,
-  "stdout": "Hello from GraalJS!\n",
-  "stderr": ""
+  "value": "Hello from hex4w scripts!",
+  "stdout": "",
+  "stderr": null
 }
 ```
+
+Flujo: nombre → whitelist (`AllowedScript`) → carga classpath → `GraalJsAdapter` (sandbox).  
+Para ABCode: transpilar a `.js`, copiar a `scripts/` y registrar el nombre en el enum.  
+Nombre no permitido → `403 SCRIPT_NOT_ALLOWED`.
 
 #### Listar Objetos de un Bucket S3
 ```bash

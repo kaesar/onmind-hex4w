@@ -2,6 +2,7 @@ package co.onmind.hex4w.transverse.exceptions;
 
 import co.onmind.hex4w.domain.exceptions.DuplicateRoleException;
 import co.onmind.hex4w.domain.exceptions.RoleNotFoundException;
+import co.onmind.hex4w.domain.exceptions.ScriptNotAllowedException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -120,6 +121,11 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
                 HttpStatus.NOT_FOUND,
                 "ROLE_NOT_FOUND",
                 notFoundEx.getMessage()
+            );
+            case ScriptNotAllowedException scriptEx -> new ErrorDetails(
+                HttpStatus.FORBIDDEN,
+                "SCRIPT_NOT_ALLOWED",
+                scriptEx.getMessage()
             );
             case IllegalArgumentException illegalArgEx -> new ErrorDetails(
                 HttpStatus.BAD_REQUEST,

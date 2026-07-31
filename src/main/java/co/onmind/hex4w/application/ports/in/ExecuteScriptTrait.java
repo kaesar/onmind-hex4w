@@ -4,5 +4,8 @@ import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import reactor.core.publisher.Mono;
 
 public interface ExecuteScriptTrait {
-    Mono<ScriptResultResponseDto> executeScript(String script);
+    /**
+     * Executes a whitelisted JavaScript file by name (e.g. {@code hello.js}).
+     */
+    Mono<ScriptResultResponseDto> executeScript(String scriptFileName);
 }
