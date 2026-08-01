@@ -14,6 +14,10 @@ app:
     cache:
       enabled: true
       ttl-seconds: 300
+  notification:
+    email:
+      from: hex4w@localhost
+      endpoint-enabled: true
 
 logging:
   level:

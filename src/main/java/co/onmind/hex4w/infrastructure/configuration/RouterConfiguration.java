@@ -1,9 +1,11 @@
 package co.onmind.hex4w.infrastructure.configuration;
 
+import co.onmind.hex4w.infrastructure.handlers.EmailHandler;
 import co.onmind.hex4w.infrastructure.handlers.RoleHandler;
 import co.onmind.hex4w.infrastructure.handlers.ScriptingHandler;
 import co.onmind.hex4w.infrastructure.handlers.StoreHandler;
 import co.onmind.hex4w.infrastructure.handlers.XdbcHandler;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -96,6 +98,16 @@ public class RouterConfiguration {
             .route(GET("/api/v1/xdb/sheet")
                 .and(accept(MediaType.APPLICATION_JSON)),
                 xdbcHandler::getSheet);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "app.notification.email.endpoint-enabled", havingValue = "true")
+    public RouterFunction<ServerResponse> emailRoutes(EmailHandler emailHandler) {
+        return RouterFunctions
+            .route(POST("/api/v1/notifications/email")
+                .and(accept(MediaType.APPLICATION_JSON))
+                .and(contentType(MediaType.APPLICATION_JSON)),
+                emailHandler::sendEmail);
     }
     
     /**

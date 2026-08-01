@@ -56,6 +56,9 @@ dependencies {
     // Redis (reactive) for caching layer
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // Spring Mail — reactive email via JavaMail wrapped in Mono
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

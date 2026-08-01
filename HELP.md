@@ -883,6 +883,88 @@ public class UserRouterConfiguration {
 5. **Backpressure**: Considerar estrategias de backpressure para streams grandes
 6. **Schedulers**: Usar schedulers apropiados para operaciones CPU-intensivas
 
+## Notificaciones (Email)
+
+### Arquitectura
+
+`EmailPort` (puerto de salida) + `SmtpEmailAdapter` (adaptador concreto) en
+`infrastructure/notification/`. El adaptador está registrado como `@Component`
+y usa `JavaMailSender` de Spring Boot (auto-configurado vía `spring.mail.*`).
+
+El envío es reactivo: `JavaMailSender.send()` (bloqueante) se envuelve en
+`Mono.fromCallable().subscribeOn(Schedulers.boundedElastic()).then()` para no
+bloquear el event loop de Netty.
+
+### Configuración
+
+```yaml
+spring:
+  mail:
+    host: localhost
+    port: 1025
+    username: ""   # sin autenticación para Mailpit local
+    password: ""
+
+app:
+  notification:
+    email:
+      from: noreply@hex4w.local
+      endpoint-enabled: false   # true para habilitar el endpoint POST /api/v1/notifications/email
+```
+
+### Endpoint de Envio de Email
+
+El endpoint está **deshabilitado por defecto**. Para habilitarlo:
+
+```yaml
+app:
+  notification:
+    email:
+      endpoint-enabled: true
+```
+
+O al lanzar la aplicación: `./gradlew bootRun --args='--app.notification.email.endpoint-enabled=true'`
+
+**Endpoint:**
+```
+POST /api/v1/notifications/email
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "to": "user@example.com",
+  "subject": "Hello",
+  "from": "noreply@hex4w.local",
+  "cc": ["admin@example.com"],
+  "body": "Mensaje de prueba"
+}
+```
+
+`from` y `cc` son opcionales. Si `from` no se envía, se usa el valor de `app.notification.email.from`.
+
+**Respuesta exitosa (200):**
+```json
+{"message": "Email queued successfully"}
+```
+
+### Testing con Mailpit
+
+Mailpit simula un servidor SMTP y expone una API HTTP para inspeccionar emails.
+
+```bash
+# Iniciar Mailpit
+docker run -d -p 1025:1025 -p 8025:8025 mailpit/mailpit
+
+# Ver emails enviados
+curl http://localhost:8025/api/v1/messages
+```
+
+El test de integración (`SmtpEmailAdapterIntegrationTest`) conecta a Mailpit en
+`localhost:1025` (SMTP) y `localhost:8025` (API). El test se salta
+automáticamente (`assumeTrue`) si Mailpit no está disponible.
+
 ## Monitoreo y Observabilidad
 
 ### Endpoints de Actuator
