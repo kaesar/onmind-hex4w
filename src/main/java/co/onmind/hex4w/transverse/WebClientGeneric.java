@@ -1,10 +1,11 @@
 package co.onmind.hex4w.transverse;
 
 import co.onmind.hex4w.infrastructure.configuration.WebClientConfiguration.ExternalServiceException;
+import co.onmind.hex4w.infrastructure.webclients.auth.XdbToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -15,25 +16,13 @@ import java.util.function.Predicate;
 
 /**
  * Generic utility class for WebClient operations.
- * 
- * This utility class provides common reactive HTTP operations with built-in
- * error handling, retry mechanisms, and logging. It abstracts common patterns
- * for making HTTP calls to external services in a reactive manner.
- * 
- * <p>Features provided:</p>
+ *
+ * <p>All methods have two flavors:
  * <ul>
- *   <li>Generic GET, POST, PUT, DELETE operations</li>
- *   <li>Automatic retry with exponential backoff</li>
- *   <li>Circuit breaker pattern support</li>
- *   <li>Timeout handling</li>
- *   <li>Error mapping and logging</li>
- * </ul>
- * 
- * @author OnMind (Cesar Andres Arcila Buitrago)
- * @version 1.0.0
- * @since 1.0.0
+ *   <li>Plain — no auth header (existing usage).</li>
+ *   <li>With {@code XdbToken} — injects Bearer/Basic/NoAuth header.</li>
+ * </ul></p>
  */
-@Component
 public class WebClientGeneric {
     
     private static final Logger logger = LoggerFactory.getLogger(WebClientGeneric.class);
@@ -73,6 +62,18 @@ public class WebClientGeneric {
             .doOnSuccess(result -> logger.debug("GET request successful: {}", uri))
             .doOnError(error -> logger.error("GET request failed: {} - Error: {}", uri, error.getMessage()));
     }
+
+    public <T> Mono<T> get(String uri, Class<T> responseType, XdbToken auth) {
+        var spec = webClient.get().uri(uri);
+        String hdr = auth.toHeaderValue();
+        if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
+        return spec.retrieve()
+            .bodyToMono(responseType)
+            .timeout(Duration.ofSeconds(30))
+            .retryWhen(createRetrySpec())
+            .doOnSuccess(result -> logger.debug("GET request successful: {}", uri))
+            .doOnError(error -> logger.error("GET request failed: {} - Error: {}", uri, error.getMessage()));
+    }
     
     /**
      * Performs a reactive GET request and returns a collection of objects.
@@ -91,6 +92,18 @@ public class WebClientGeneric {
         return webClient.get()
             .uri(uri)
             .retrieve()
+            .bodyToFlux(responseType)
+            .timeout(Duration.ofSeconds(30))
+            .retryWhen(createRetrySpec())
+            .doOnComplete(() -> logger.debug("GET collection request successful: {}", uri))
+            .doOnError(error -> logger.error("GET collection request failed: {} - Error: {}", uri, error.getMessage()));
+    }
+
+    public <T> Flux<T> getMany(String uri, Class<T> responseType, XdbToken auth) {
+        var spec = webClient.get().uri(uri);
+        String hdr = auth.toHeaderValue();
+        if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
+        return spec.retrieve()
             .bodyToFlux(responseType)
             .timeout(Duration.ofSeconds(30))
             .retryWhen(createRetrySpec())
@@ -117,6 +130,21 @@ public class WebClientGeneric {
         return webClient.post()
             .uri(uri)
             .bodyValue(requestBody)
+            .retrieve()
+            .bodyToMono(responseType)
+            .timeout(Duration.ofSeconds(30))
+            .retryWhen(createRetrySpec())
+            .doOnSuccess(result -> logger.debug("POST request successful: {}", uri))
+            .doOnError(error -> logger.error("POST request failed: {} - Error: {}", uri, error.getMessage()));
+    }
+
+    public <T, R> Mono<R> post(String uri, T requestBody, Class<R> responseType, XdbToken auth) {
+        var spec = webClient.post().uri(uri);
+        String hdr = auth.toHeaderValue();
+        if (!hdr.isEmpty()) {
+            spec.header(HttpHeaders.AUTHORIZATION, hdr);
+        }
+        return spec.bodyValue(requestBody)
             .retrieve()
             .bodyToMono(responseType)
             .timeout(Duration.ofSeconds(30))
@@ -176,6 +204,19 @@ public class WebClientGeneric {
             .doOnSuccess(result -> logger.debug("PUT request successful: {}", uri))
             .doOnError(error -> logger.error("PUT request failed: {} - Error: {}", uri, error.getMessage()));
     }
+
+    public <T, R> Mono<R> put(String uri, T requestBody, Class<R> responseType, XdbToken auth) {
+        var spec = webClient.put().uri(uri);
+        String hdr = auth.toHeaderValue();
+        if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
+        return spec.bodyValue(requestBody)
+            .retrieve()
+            .bodyToMono(responseType)
+            .timeout(Duration.ofSeconds(30))
+            .retryWhen(createRetrySpec())
+            .doOnSuccess(result -> logger.debug("PUT request successful: {}", uri))
+            .doOnError(error -> logger.error("PUT request failed: {} - Error: {}", uri, error.getMessage()));
+    }
     
     /**
      * Performs a reactive DELETE request.
@@ -192,6 +233,18 @@ public class WebClientGeneric {
         return webClient.delete()
             .uri(uri)
             .retrieve()
+            .bodyToMono(Void.class)
+            .timeout(Duration.ofSeconds(30))
+            .retryWhen(createRetrySpec())
+            .doOnSuccess(result -> logger.debug("DELETE request successful: {}", uri))
+            .doOnError(error -> logger.error("DELETE request failed: {} - Error: {}", uri, error.getMessage()));
+    }
+
+    public Mono<Void> delete(String uri, XdbToken auth) {
+        var spec = webClient.delete().uri(uri);
+        String hdr = auth.toHeaderValue();
+        if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
+        return spec.retrieve()
             .bodyToMono(Void.class)
             .timeout(Duration.ofSeconds(30))
             .retryWhen(createRetrySpec())

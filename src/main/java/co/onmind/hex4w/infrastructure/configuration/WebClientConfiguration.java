@@ -21,6 +21,9 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import co.onmind.hex4w.infrastructure.webclients.auth.XdbToken;
+import co.onmind.hex4w.transverse.WebClientGeneric;
+
 /**
  * Configuration class for WebClient and external service communication.
  * 
@@ -77,30 +80,18 @@ public class WebClientConfiguration {
             .filter(handleErrors())
             .build();
     }
-    
+
     /**
-     * Creates a WebClient specifically configured for notification services.
+     * Creates a WebClientGeneric bean wrapping the default WebClient.
      * 
-     * This WebClient can be used for sending notifications to external services
-     * and includes specific configuration optimized for notification scenarios.
-     * 
-     * @param baseUrl the base URL for the notification service
-     * @return a configured WebClient for notifications
+     * @param webClient the default WebClient
+     * @return a WebClientGeneric instance
      */
     @Bean
-    public WebClient notificationWebClient(@Value("${app.notification.base-url:http://localhost:8081}") String baseUrl) {
-        return WebClient.builder()
-            .baseUrl(baseUrl)
-            .clientConnector(createClientConnector())
-            .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxMemorySize))
-            .filter(logRequest())
-            .filter(logResponse())
-            .filter(handleErrors())
-            .defaultHeader("Content-Type", "application/json")
-            .defaultHeader("Accept", "application/json")
-            .build();
+    public WebClientGeneric webClientGeneric(WebClient webClient) {
+        return new WebClientGeneric(webClient);
     }
-    
+
     /**
      * Creates a ReactorClientHttpConnector with custom HTTP client configuration.
      * 
@@ -202,17 +193,52 @@ public class WebClientConfiguration {
     }
     
     /**
-     * Creates a NotificationWebClient bean for notification service integration.
+     * Creates a WebClient specifically configured for XDB ABC API.
      * 
-     * @param notificationWebClient the configured WebClient for notifications
-     * @param webClientGeneric the generic WebClient utility
-     * @return a configured NotificationWebClient instance
+     * This WebClient is configured for communication with XDB database
+     * via the ABC API endpoint (/abc).
+     * 
+     * @param baseUrl the base URL for the XDB service
+     * @return a configured WebClient for XDB
      */
     @Bean
-    public co.onmind.hex4w.infrastructure.webclients.NotificationWebClient notificationWebClientBean(
-            @org.springframework.beans.factory.annotation.Qualifier("notificationWebClient") WebClient notificationWebClient,
-            co.onmind.hex4w.transverse.WebClientGeneric webClientGeneric) {
-        return new co.onmind.hex4w.infrastructure.webclients.NotificationWebClient(notificationWebClient, webClientGeneric);
+    public WebClient xdbWebClient(@Value("${app.xdb.base-url:http://localhost:8082}") String baseUrl) {
+        return WebClient.builder()
+            .baseUrl(baseUrl)
+            .clientConnector(createClientConnector())
+            .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxMemorySize))
+            .filter(logRequest())
+            .filter(logResponse())
+            .filter(handleErrors())
+            .defaultHeader("Content-Type", "application/json")
+            .defaultHeader("Accept", "application/json")
+            .build();
+    }
+    
+    /**
+     * Creates a AbcWebClient bean for XDB ABC API integration.
+     * 
+     * @param xdbWebClient the configured WebClient for XDB (with base URL)
+     * @return a configured AbcWebClient instance
+     */
+    @Bean
+    public co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClientBean(
+            @org.springframework.beans.factory.annotation.Qualifier("xdbWebClient") WebClient xdbWebClient,
+            @Value("${app.xdb.auth-type:none}") String authType,
+            @Value("${app.xdb.auth-token:}") String authToken) {
+        co.onmind.hex4w.transverse.WebClientGeneric xdbWebClientGeneric = 
+            new co.onmind.hex4w.transverse.WebClientGeneric(xdbWebClient);
+        XdbToken token = switch (authType.toLowerCase()) {
+            case "bearer" -> XdbToken.bearer(authToken);
+            case "basic" -> {
+                String[] parts = authToken.split(":", 2);
+                String user = parts.length > 0 ? parts[0] : "";
+                String pass = parts.length > 1 ? parts[1] : "";
+                yield XdbToken.basic(user, pass);
+            }
+            default -> XdbToken.none();
+        };
+        return new co.onmind.hex4w.infrastructure.webclients.AbcWebClient(xdbWebClientGeneric, token);
     }
     
     @Bean

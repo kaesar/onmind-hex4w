@@ -244,6 +244,7 @@ curl http://localhost:8080/actuator/health
 | `GET`  | `/api/v1/roles/{id}` | Obtener role por ID | - | `RoleResponseDto` |
 | `GET`  | `/api/v1/roles/search?name={pattern}` | Buscar roles por patrón de nombre | - | `Flux<RoleResponseDto>` |
 | `POST` | `/api/v1/scripts/execute` | Ejecutar archivo `.js` whitelisteado (GraalJS) | `{ "script": "hello.js" }` | `ScriptResultResponseDto` |
+| `GET` | `/api/v1/xdb/sheet` | Listar hojas XDB (prueba AbcWebClient) | - | `SheetResponseDto` |
 | `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
 
 ### Ejemplos de Uso
@@ -327,6 +328,68 @@ Flujo: nombre → whitelist (`AllowedScript`) → carga classpath → `GraalJsAd
 Para ABCode: transpilar a `.js`, copiar a `scripts/` y registrar el nombre en el enum.  
 Nombre no permitido → `403 SCRIPT_NOT_ALLOWED`.
 
+#### XDB - Sheet (XdbcUseCase + AbcWebClient)
+
+Ruta: `GET /api/v1/xdb/sheet`  
+
+Endpoint de prueba que consume XDB (base de datos en `../api/xdb` Kotlin) vía
+`AbcWebClient.sheet()`. Devuelve el listado de hojas/colecciones.
+
+```bash
+curl http://localhost:8080/api/v1/xdb/sheet
+```
+
+**Respuesta** (ejemplo):
+```json
+{
+  "ok": true,
+  "status": 200,
+  "message": "OK",
+  "total": 5,
+  "data": [
+    { "kit01": "1", "kit02": "Hoja A", "kit03": "Title A" }
+  ]
+}
+```
+
+Flujo hexagonal: `XdbcHandler` → `XdbcSheetTrait` → `XdbcUseCase` → `AbcWebClient` → XDB.
+
+**Configuración** (`application.yml`):
+```yaml
+app:
+  xdb:
+    base-url: http://localhost:8082
+    default-from: xykit
+    default-some: sheet
+```
+
+**Operaciones del cliente `AbcWebClient`:**
+
+| Método | Descripción | Parámetros clave |
+|--------|-------------|------------------|
+| `sheet(show, from, some)` | Listar hoja/colección | `show`, `from`, `some` |
+| `find(request)` | Buscar registros | `from`, `some`, `where`, `show`, `sort`, `limit`, `offset` |
+| `insert(request)` | Insertar registro | `from`, `some`, `puts` (datos) |
+| `update(request)` | Actualizar registro | `from`, `some`, `puts`, `where` |
+| `remove(request)` | Eliminar registro | `from`, `some`, `where` |
+| `create(request)` | Crear colección | `from`, `some` |
+| `drop(request)` | Borrar colección | `from`, `some` |
+| `define(request)` | Definir esquema | `from`, `some`, `puts` (spec: `col=alias,...`) |
+| `whoami()` | Identidad usuario | — |
+| `signup(data)` | Registro usuario | `data` map |
+| `ask(request)` | Genérico (rutea por `what`) | `what` + params |
+
+**Respuesta estándar** (`AbcResponse`):
+```json
+{
+  "ok": true,
+  "status": 200,
+  "message": "OK",
+  "total": 10,
+  "data": [...]
+}
+```
+
 #### Listar Objetos de un Bucket S3
 ```bash
 curl "http://localhost:8080/api/v1/store/items?bucket=my-bucket"
@@ -394,6 +457,16 @@ server:
 spring:
   webflux:
     base-path: /api/v1
+```
+
+### Configuración XDB (AbcWebClient)
+
+```yaml
+app:
+  xdb:
+    base-url: http://localhost:8082      # XDB server URL
+    default-from: xykit                  # Default source identifier
+    default-some: sheet                  # Default collection identifier
 ```
 
 ## Testing Reactivo

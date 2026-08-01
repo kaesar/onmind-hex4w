@@ -1,8 +1,9 @@
 package co.onmind.hex4w.infrastructure.configuration;
 
 import co.onmind.hex4w.infrastructure.handlers.RoleHandler;
-import co.onmind.hex4w.infrastructure.handlers.StoreHandler;
 import co.onmind.hex4w.infrastructure.handlers.ScriptingHandler;
+import co.onmind.hex4w.infrastructure.handlers.StoreHandler;
+import co.onmind.hex4w.infrastructure.handlers.XdbcHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -87,6 +88,14 @@ public class RouterConfiguration {
                 .and(accept(MediaType.APPLICATION_JSON))
                 .and(contentType(MediaType.APPLICATION_JSON)),
                 scriptingHandler::executeScript);
+    }
+
+    @Bean
+    public RouterFunction<ServerResponse> xdbcRoutes(XdbcHandler xdbcHandler) {
+        return RouterFunctions
+            .route(GET("/api/v1/xdb/sheet")
+                .and(accept(MediaType.APPLICATION_JSON)),
+                xdbcHandler::getSheet);
     }
     
     /**
