@@ -53,6 +53,9 @@ dependencies {
     // Kafka (optional — activate with profile 'kafka')
     implementation 'org.springframework.kafka:spring-kafka'
 
+    // Redis (reactive) for caching layer
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -22,6 +22,12 @@ spring:
     exclude:
       - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
     
+  # Redis (Lettuce) — used by the XDB cache adapter
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    
   # H2 Console configuration (for development)
   h2:
     console:
@@ -61,6 +67,11 @@ app:
     auth-type: basic
     # Token value for bearer/basic (leave empty for none)
     auth-token: admin:admin 
+    # Redis cache for ABC sheet responses
+    cache:
+      enabled: true
+      ttl-seconds: 300
+
 # Management endpoints
 management:
   endpoints:

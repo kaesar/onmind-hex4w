@@ -24,34 +24,38 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 ### Estructura de Paquetes
 
 ```
-  __________________
-./ co.onmind.hex4w /
-│
-├── domain/                  # Capa de Dominio (Core Business Logic)
-│   ├── models/              # Entidades de dominio
-│   ├── services/            # Servicios de dominio reactivos
-│   └── exceptions/          # Excepciones de dominio
-├── application/             # Capa de Aplicación (Use Cases)
-│   ├── dto/
-│   │   ├── in/              # DTOs de entrada
-│   │   └── out/             # DTOs de salida
-│   ├── mappers/             # Mappers reactivos entre DTOs y modelos
-│   ├── usecases/            # Implementaciones de casos de uso reactivos
-│   └── ports/
-│       ├── in/              # Puertos de entrada reactivos (Use Cases)
-│       └── out/             # Puertos de salida reactivos (Repositories)
-├── infrastructure/          # Capa de Infraestructura (Adapters)
-│   ├── configuration/       # Configuraciones de Spring WebFlux
-│   ├── handlers/            # Handlers reactivos (en lugar de controllers)
-│   ├── persistence/         # Implementaciones de persistencia R2DBC
-│   │   ├── adapters/        # Adaptadores de repositorio
-│   │   ├── entities/        # Entidades R2DBC
-│   │   ├── mappers/         # Mappers de entidades
-│   │   └── repositories/    # Repositorios R2DBC
-│   └── webclients/          # Clientes web reactivos para servicios externos
-└── transverse/              # Componentes Transversales
-    ├── exceptions/          # Manejo global de errores reactivo (GlobalErrorHandler)
-    └── logging/             # Aspectos de logging reactivos
+    __________________
+  ./ co.onmind.hex4w /
+  |
+  |-- domain/                   # Capa de Dominio (Core Business Logic)
+  |   |-- models/               # Entidades de dominio
+  |   |-- services/             # Servicios de dominio reactivos
+  |   `-- exceptions/           # Excepciones de dominio
+  |-- application/              # Capa de Aplicacion (Use Cases)
+  |   |-- dto/
+  |   |   |-- in/               # DTOs de entrada
+  |   |   `-- out/              # DTOs de salida
+  |   |-- mappers/              # Mappers reactivos entre DTOs y modelos
+  |   |-- usecases/             # Implementaciones de casos de uso reactivos
+  |   `-- ports/
+  |       |-- in/               # Puertos de entrada reactivos (Use Cases)
+  |       `-- out/              # Puertos de salida reactivos (Repositories)
+  |-- infrastructure/           # Capa de Infraestructura (Adapters)
+  |   |-- configuration/        # Configuraciones de Spring WebFlux
+  |   |-- handlers/             # Handlers reactivos (en lugar de controllers)
+  |   |-- events/               # Eventos Kafka
+  |   |-- persistence/          # Implementaciones de persistencia R2DBC
+  |   |   |-- adapters/         # Adaptadores de repositorio
+  |   |   |-- entities/         # Entidades R2DBC
+  |   |   |-- mappers/          # Mappers de entidades
+  |   |   `-- repositories/     # Repositorios R2DBC
+  |   |-- cache/                # Adaptadores de cache (Redis)
+  |   `-- webclients/           # Clientes web reactivos para servicios externos
+  |       |-- AbcAdapter        # Adaptador para XDB (implementa AbcPort para /abc)
+  |       `-- CachedAbcAdapter  # Decorator: cachea responses de /abc via Redis
+  `-- transverse/               # Componentes Transversales
+      |-- exceptions/           # Manejo global de errores reactivo (GlobalErrorHandler)
+      `-- logging/              # Aspectos de logging reactivos
 ```
 
 ### Diagrama de Arquitectura
@@ -352,7 +356,7 @@ curl http://localhost:8080/api/v1/xdb/sheet
 }
 ```
 
-Flujo hexagonal: `XdbcHandler` → `XdbcSheetTrait` → `XdbcUseCase` → `AbcWebClient` → XDB.
+Flujo hexagonal: `XdbcHandler` → `XdbcSheetTrait` → `XdbcUseCase` → `AbcPort` (`CachedAbcAdapter` → `AbcAdapter` → `AbcWebClient`) → XDB.
 
 **Configuración** (`application.yml`):
 ```yaml
@@ -526,6 +530,83 @@ Error:
 - Kafka deshabilitado por defecto (no requiere broker). `application.yml` excluye `KafkaAutoConfiguration`.
 - Perfil `kafka` lo rehabilita y activa `ScriptKafkaConsumer`.
 - Dependencia: `org.springframework.kafka:spring-kafka`.
+
+### Redis Cache (opcional)
+
+Se incluye un adaptador reactivo de cache basado en Redis que cachea respuestas
+de lectura del endpoint `/abc` (XDB).  El paquete `infrastructure/cache/`
+contiene `RedisCacheAdapter` (implementa `CachePort`), y el decorator
+`CachedAbcAdapter` en `infrastructure/webclients/` envuelve a `AbcAdapter`
+para interceptar `sheet()` (caché) y pasar `exec()` (escrituras) sin caché.
+
+#### Dependencia
+
+```gradle
+implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+```
+
+#### Configuración (`application.yml`)
+
+```yaml
+spring:
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+
+app:
+  xdb:
+    cache:
+      enabled: true          # activa/desactiva el decorator
+      ttl-seconds: 300       # vida útil de las entradas cacheadas
+```
+
+#### Cómo funciona
+
+1. `XdbcUseCase` inyecta `AbcPort` (no `AbcWebClient` directamente).
+2. En `WebClientConfiguration`, el bean `AbcPort` primario (`@Primary`) es un
+   `CachedAbcAdapter` que delega a `AbcAdapter`.
+3. En `sheet(show, from, some)`:
+   - Se genera la key `abc:sheet:{show}:{from}:{some}`.
+   - **Cache HIT**: devuelve la respuesta deserializada desde Redis, sin tocar
+     el delegate.
+   - **Cache MISS**: llama al delegate (`AbcWebClient` → `/abc`), serializa el
+     `AbcResponse` a JSON, lo almacena en Redis con el TTL configurado y lo
+     devuelve.
+4. En `exec(request)`: siempre delega sin caché (operaciones de escritura).
+5. Cualquier error de Redis (lectura o escritura) se absorbe silenciosamente
+   y se continúa con el delegate, por lo que un broker caído no rompe el flujo.
+
+#### Componentes
+
+| Clase | Paquete | Rol |
+|---|---|---|
+| `CachePort` | `application/ports/out/` | Puerto de sal genérico (get/set/evict) |
+| `RedisCacheAdapter` | `infrastructure/cache/` | Adaptador concreto usando `ReactiveRedisTemplate` (auto-configurado por Spring Boot) |
+| `CachedAbcAdapter` | `infrastructure/webclients/` | Decorator de `AbcPort` que cachea `sheet()` |
+| — | `infrastructure/configuration/` | Spring Boot auto-configura `ReactiveRedisTemplate<String, String>` |
+
+#### Reutilizar el cache desde otro caso de uso
+
+`CachePort` es genérico: cualquier caso de uso puede inyectarlo directamente
+sin crear un nuevo adaptador Redis.  Si solo necesitas cachear un puerto
+reactivo (Mono/Flux), crea un decorator como `CachedAbcAdapter`.
+
+```java
+// Directo: uso genérico de CachePort
+@Component
+public class SomeUseCase {
+    private final CachePort cachePort;
+
+    public Mono<Result> getData(String id) {
+        return cachePort.get("prefix:" + id)
+                .switchIfEmpty(fetchFromDb(id)
+                    .flatMap(result -> cachePort.set("prefix:" + id, toJson(result), Duration.ofSeconds(60))
+                        .onErrorResume(e -> Mono.empty())
+                        .thenReturn(result)));
+    }
+}
+```
 
 ## Testing Reactivo
 

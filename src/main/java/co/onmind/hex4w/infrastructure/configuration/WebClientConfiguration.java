@@ -21,8 +21,12 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import co.onmind.hex4w.application.ports.out.AbcPort;
+import co.onmind.hex4w.application.ports.out.CachePort;
+import co.onmind.hex4w.infrastructure.webclients.CachedAbcAdapter;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcToken;
 import co.onmind.hex4w.transverse.WebClientGeneric;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Configuration class for WebClient and external service communication.
@@ -245,6 +249,17 @@ public class WebClientConfiguration {
     public co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter(
             co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient) {
         return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient);
+    }
+
+    @Bean
+    @org.springframework.context.annotation.Primary
+    public AbcPort abcPort(
+            co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter,
+            CachePort cachePort,
+            ObjectMapper objectMapper,
+            @Value("${app.xdb.cache.ttl-seconds:300}") int ttlSeconds) {
+        return new CachedAbcAdapter(abcAdapter, cachePort, objectMapper,
+                Duration.ofSeconds(ttlSeconds));
     }
 
     @Bean
