@@ -1,4 +1,4 @@
-package co.onmind.hex4w.infrastructure.webclients;
+package co.onmind.hex4w.infrastructure.storage;
 
 import co.onmind.hex4w.application.ports.out.StorePort;
 import co.onmind.hex4w.domain.models.StoreItem;

@@ -16,6 +16,9 @@ cd hex4w
 
 # Run (uses embedded H2 database)
 ./gradlew bootRun
+
+# Run with Kafka consumer (optional)
+./gradlew bootRun --spring.profiles.active=dev,kafka
 ```
 
 App starts at `http://localhost:8080`. Health check: `GET /actuator/health`.

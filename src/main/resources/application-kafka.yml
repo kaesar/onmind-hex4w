@@ -1,0 +1,27 @@
+spring:
+  config:
+    activate:
+      on-profile: kafka
+
+  # Re-enable Kafka auto-config (excluded in default profile)
+  autoconfigure:
+    exclude: []
+
+  # Kafka configuration for reactive consumer
+  kafka:
+    consumer:
+      bootstrap-servers: ${app.kafka.bootstrap-servers:localhost:9092}
+      group-id: hex4w-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+# Application-specific Kafka settings
+app:
+  kafka:
+    bootstrap-servers: localhost:9092
+    topic:
+      script-commands: hex4w.script.commands
+      script-results: hex4w.script.results

@@ -1,41 +1,39 @@
-package co.onmind.hex4w.infrastructure.webclients.auth;
+package co.onmind.hex4w.infrastructure.webclients.dto;
 
 /**
- * ABC (Authorization Bearer Credentials) for XDB authentication.
- * <p>
- * Use Case (UC): Provides optional bearer/Basic token injection for WebClient requests.
+ * Authorization token for XDB ABC API authentication.
  * <p>
  * XDB supports: NoAuth (default), Basic (user:pass), Bearer (JWT for OIDC/Cognito).
  *
  * @param type  authorization type: {@code none}, {@code basic}, {@code bearer}
  * @param token the credential value (empty/ignored when type is {@code none})
  */
-public record XdbToken(String type, String token) {
+public record AbcToken(String type, String token) {
 
     public static final String BEARER = "bearer";
     public static final String BASIC = "basic";
     public static final String NONE = "none";
 
-    public XdbToken {
+    public AbcToken {
         if (type == null || type.isBlank()) type = NONE;
         if (token == null) token = "";
     }
 
     /** Creates a NoAuth token (no header added). */
-    public static XdbToken none() {
-        return new XdbToken(NONE, "");
+    public static AbcToken none() {
+        return new AbcToken(NONE, "");
     }
 
     /** Creates a Bearer token for JWT-based auth. */
-    public static XdbToken bearer(String jwt) {
-        return new XdbToken(BEARER, jwt != null ? jwt : "");
+    public static AbcToken bearer(String jwt) {
+        return new AbcToken(BEARER, jwt != null ? jwt : "");
     }
 
     /** Creates a Basic token for username:password auth. */
-    public static XdbToken basic(String user, String pass) {
+    public static AbcToken basic(String user, String pass) {
         String encoded = java.util.Base64.getEncoder()
             .encodeToString((user + ":" + pass).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        return new XdbToken(BASIC, encoded);
+        return new AbcToken(BASIC, encoded);
     }
 
     /** Returns the {@code Authorization} header value, or empty if type is {@code none}. */

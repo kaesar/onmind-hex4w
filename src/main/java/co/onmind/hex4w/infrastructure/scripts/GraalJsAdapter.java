@@ -1,4 +1,4 @@
-package co.onmind.hex4w.infrastructure.webclients;
+package co.onmind.hex4w.infrastructure.scripts;
 
 import co.onmind.hex4w.application.ports.out.ScriptingPort;
 import co.onmind.hex4w.domain.models.ScriptResult;

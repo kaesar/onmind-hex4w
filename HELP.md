@@ -465,9 +465,67 @@ spring:
 app:
   xdb:
     base-url: http://localhost:8082      # XDB server URL
-    default-from: xykit                  # Default source identifier
     default-some: sheet                  # Default collection identifier
+    auth-type: none                      # none | bearer | basic
+    auth-token: ""                       # token or user:pass for basic
 ```
+
+### Kafka (opcional, perfil `kafka`)
+
+Habilita un consumidor reactivo que ejecuta scripts vía mensajes Kafka.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,kafka
+```
+
+#### Configuración (`application-kafka.yml`)
+
+```yaml
+app:
+  kafka:
+    bootstrap-servers: localhost:9092
+    topic:
+      script-commands: hex4w.script.commands
+      script-results: hex4w.script.results
+```
+
+#### Mensaje de comando (entrada, topic `hex4w.script.commands`)
+
+```json
+{
+  "script": "hello.js",
+  "correlationId": "req-123"
+}
+```
+
+El consumidor (`ScriptKafkaConsumer`) ejecuta el script vía `ExecuteScriptTrait` y publica el resultado.
+
+#### Mensaje de resultado (salida, topic `hex4w.script.results`)
+
+Éxito:
+```json
+{
+  "correlationId": "req-123",
+  "result": { "value": "Hello from hex4w scripts!", "stdout": "", "stderr": null },
+  "error": null
+}
+```
+
+Error:
+```json
+{
+  "correlationId": "req-123",
+  "result": null,
+  "error": "Script file not allowed: 'noexiste.js'. Allowed: hello.js, example.js"
+}
+```
+
+#### Notas
+- Kafka deshabilitado por defecto (no requiere broker). `application.yml` excluye `KafkaAutoConfiguration`.
+- Perfil `kafka` lo rehabilita y activa `ScriptKafkaConsumer`.
+- Dependencia: `org.springframework.kafka:spring-kafka`.
 
 ## Testing Reactivo
 

@@ -1,7 +1,7 @@
 package co.onmind.hex4w.transverse;
 
 import co.onmind.hex4w.infrastructure.configuration.WebClientConfiguration.ExternalServiceException;
-import co.onmind.hex4w.infrastructure.webclients.auth.XdbToken;
+import co.onmind.hex4w.infrastructure.webclients.dto.AbcToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -63,7 +63,7 @@ public class WebClientGeneric {
             .doOnError(error -> logger.error("GET request failed: {} - Error: {}", uri, error.getMessage()));
     }
 
-    public <T> Mono<T> get(String uri, Class<T> responseType, XdbToken auth) {
+    public <T> Mono<T> get(String uri, Class<T> responseType, AbcToken auth) {
         var spec = webClient.get().uri(uri);
         String hdr = auth.toHeaderValue();
         if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
@@ -99,7 +99,7 @@ public class WebClientGeneric {
             .doOnError(error -> logger.error("GET collection request failed: {} - Error: {}", uri, error.getMessage()));
     }
 
-    public <T> Flux<T> getMany(String uri, Class<T> responseType, XdbToken auth) {
+    public <T> Flux<T> getMany(String uri, Class<T> responseType, AbcToken auth) {
         var spec = webClient.get().uri(uri);
         String hdr = auth.toHeaderValue();
         if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
@@ -138,7 +138,7 @@ public class WebClientGeneric {
             .doOnError(error -> logger.error("POST request failed: {} - Error: {}", uri, error.getMessage()));
     }
 
-    public <T, R> Mono<R> post(String uri, T requestBody, Class<R> responseType, XdbToken auth) {
+    public <T, R> Mono<R> post(String uri, T requestBody, Class<R> responseType, AbcToken auth) {
         var spec = webClient.post().uri(uri);
         String hdr = auth.toHeaderValue();
         if (!hdr.isEmpty()) {
@@ -205,7 +205,7 @@ public class WebClientGeneric {
             .doOnError(error -> logger.error("PUT request failed: {} - Error: {}", uri, error.getMessage()));
     }
 
-    public <T, R> Mono<R> put(String uri, T requestBody, Class<R> responseType, XdbToken auth) {
+    public <T, R> Mono<R> put(String uri, T requestBody, Class<R> responseType, AbcToken auth) {
         var spec = webClient.put().uri(uri);
         String hdr = auth.toHeaderValue();
         if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);
@@ -240,7 +240,7 @@ public class WebClientGeneric {
             .doOnError(error -> logger.error("DELETE request failed: {} - Error: {}", uri, error.getMessage()));
     }
 
-    public Mono<Void> delete(String uri, XdbToken auth) {
+    public Mono<Void> delete(String uri, AbcToken auth) {
         var spec = webClient.delete().uri(uri);
         String hdr = auth.toHeaderValue();
         if (!hdr.isEmpty()) spec.header(HttpHeaders.AUTHORIZATION, hdr);

@@ -21,7 +21,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-import co.onmind.hex4w.infrastructure.webclients.auth.XdbToken;
+import co.onmind.hex4w.infrastructure.webclients.dto.AbcToken;
 import co.onmind.hex4w.transverse.WebClientGeneric;
 
 /**
@@ -228,19 +228,25 @@ public class WebClientConfiguration {
             @Value("${app.xdb.auth-token:}") String authToken) {
         co.onmind.hex4w.transverse.WebClientGeneric xdbWebClientGeneric = 
             new co.onmind.hex4w.transverse.WebClientGeneric(xdbWebClient);
-        XdbToken token = switch (authType.toLowerCase()) {
-            case "bearer" -> XdbToken.bearer(authToken);
+        AbcToken token = switch (authType.toLowerCase()) {
+            case "bearer" -> AbcToken.bearer(authToken);
             case "basic" -> {
                 String[] parts = authToken.split(":", 2);
                 String user = parts.length > 0 ? parts[0] : "";
                 String pass = parts.length > 1 ? parts[1] : "";
-                yield XdbToken.basic(user, pass);
+                yield AbcToken.basic(user, pass);
             }
-            default -> XdbToken.none();
+            default -> AbcToken.none();
         };
         return new co.onmind.hex4w.infrastructure.webclients.AbcWebClient(xdbWebClientGeneric, token);
     }
-    
+
+    @Bean
+    public co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter(
+            co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient) {
+        return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient);
+    }
+
     @Bean
     public S3AsyncClient s3AsyncClient(
             @Value("${app.s3.region:us-east-1}") String region,

@@ -50,6 +50,9 @@ dependencies {
     implementation 'org.graalvm.polyglot:polyglot:24.1.1'
     implementation 'org.graalvm.polyglot:js:24.1.1'
 
+    // Kafka (optional — activate with profile 'kafka')
+    implementation 'org.springframework.kafka:spring-kafka'
+
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

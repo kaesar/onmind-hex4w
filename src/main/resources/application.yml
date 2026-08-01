@@ -16,6 +16,11 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+
+  # Kafka disabled by default. Enable with: --spring.profiles.active=dev,kafka
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
     
   # H2 Console configuration (for development)
   h2:

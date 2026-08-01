@@ -2,7 +2,7 @@ package co.onmind.hex4w.infrastructure.webclients;
 
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import co.onmind.hex4w.infrastructure.webclients.auth.XdbToken;
+import co.onmind.hex4w.infrastructure.webclients.dto.AbcToken;
 import co.onmind.hex4w.transverse.WebClientGeneric;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,15 +16,15 @@ public class AbcWebClient {
     private static final String ABC_ENDPOINT = "/abc";
 
     private final WebClientGeneric webClientGeneric;
-    private final XdbToken abcToken;
+    private final AbcToken abcToken;
 
     public AbcWebClient(WebClientGeneric webClientGeneric) {
-        this(webClientGeneric, XdbToken.none());
+        this(webClientGeneric, AbcToken.none());
     }
 
-    public AbcWebClient(WebClientGeneric webClientGeneric, XdbToken abcToken) {
+    public AbcWebClient(WebClientGeneric webClientGeneric, AbcToken abcToken) {
         this.webClientGeneric = webClientGeneric;
-        this.abcToken = abcToken != null ? abcToken : XdbToken.none();
+        this.abcToken = abcToken != null ? abcToken : AbcToken.none();
     }
 
     public Mono<AbcResponse> sheet(String showColumns, String from, String some) {
