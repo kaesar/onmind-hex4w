@@ -986,3 +986,51 @@ logging:
     org.springframework.r2dbc: DEBUG
     reactor.netty: INFO
 ```
+
+## GraphQL (BFF sobre XDB ABC)
+
+hex4w expone un endpoint GraphQL que actúa como **Backend For Frontend** sobre la API
+`/abc` de xdb. El resolver (`AbcGraphqlResolver`) consume `AbcSheetUseCase` →
+`AbcPort` (`@Primary` CachedAbcAdapter) → `AbcAdapter` → `POST /abc`.
+
+### Configuración
+
+Deshabilitado por defecto. Para habilitar:
+
+```yaml
+app:
+  graphql:
+    enabled: true
+```
+
+O al lanzar:
+```bash
+./gradlew bootRun --args='--app.graphql.enabled=true'
+```
+
+El endpoint está en `/graphql`. En modo dev, GraphiQL está en `/graphiql`.
+
+### Queries disponibles
+
+```graphql
+# 1. Consulta un sheet individual (equivalente a /api/v1/xdb/sheet)
+query {
+  abcSheet(show: "orders", from: "customers", some: "id,name") {
+    ok status message total data
+  }
+}
+
+# 2. Consulta múltiples sheets en un solo request (combina conjuntos)
+query {
+  abcSheets(requests: [
+    { show: "orders", from: "customers", some: "id,name" }
+    { show: "products", from: "inventory", some: "sku,qty" }
+  ]) {
+    ok status message total data
+  }
+}
+```
+
+El query `abcSheets` dispara múltiples llamadas `sheet()` en paralelo (via
+`Flux.flatMap`) y retorna todas las respuestas combinadas. El cache de Redis
+(`CachedAbcAdapter`) aplica a cada sheet individual.

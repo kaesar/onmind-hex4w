@@ -18,6 +18,8 @@ app:
     email:
       from: hex4w@localhost
       endpoint-enabled: true
+  graphql:
+    enabled: true
 
 logging:
   level:

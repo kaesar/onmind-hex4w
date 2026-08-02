@@ -1,0 +1,20 @@
+type Query {
+  abcSheet(show: String, from: String, some: String): AbcSheetResult
+  abcSheets(requests: [AbcSheetInput!]!): [AbcSheetResult!]!
+}
+
+input AbcSheetInput {
+  show: String
+  from: String
+  some: String
+}
+
+type AbcSheetResult {
+  ok: Boolean
+  status: Int
+  message: String
+  total: Int
+  data: JSON
+}
+
+scalar JSON

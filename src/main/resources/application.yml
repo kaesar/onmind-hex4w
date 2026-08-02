@@ -70,6 +70,8 @@ app:
       host: localhost
       port: 1025
       endpoint-enabled: false
+  graphql:
+    enabled: false
     base-url: http://localhost:8081
   s3:
     region: us-east-1
