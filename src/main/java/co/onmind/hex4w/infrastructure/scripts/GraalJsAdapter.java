@@ -1,6 +1,7 @@
 package co.onmind.hex4w.infrastructure.scripts;
 
 import co.onmind.hex4w.application.ports.out.ScriptingPort;
+import co.onmind.hex4w.application.ports.out.ScriptServicesPort;
 import co.onmind.hex4w.domain.models.ScriptResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,17 +14,16 @@ import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.HostAccess;
 import org.graalvm.polyglot.Value;
 
-import java.time.Duration;
-
 @Component
 public class GraalJsAdapter implements ScriptingPort {
 
     private static final Logger logger = LoggerFactory.getLogger(GraalJsAdapter.class);
 
-    // Shared engine; contexts are cheap and created per execution for isolation.
     private final Engine engine;
+    private final ScriptServicesPort scriptServices;
 
-    public GraalJsAdapter() {
+    public GraalJsAdapter(ScriptServicesPort scriptServices) {
+        this.scriptServices = scriptServices;
         this.engine = Engine.create("js");
         logger.info("GraalVM JavaScript engine initialized for sandboxed execution");
     }
@@ -36,12 +36,9 @@ public class GraalJsAdapter implements ScriptingPort {
     }
 
     private ScriptResult executeSandboxed(String script) {
-        // Build a restricted context: no host access, no IO, no thread creation,
-        // bounded CPU time. This prevents the executed code from escaping the sandbox
-        // (e.g. accessing java.lang.Runtime, files, or the network).
         try (Context context = Context.newBuilder("js")
                 .engine(engine)
-                .allowHostAccess(HostAccess.NONE)
+                .allowHostAccess(HostAccess.ALL)
                 .allowNativeAccess(false)
                 .allowCreateThread(false)
                 .allowIO(false)
@@ -53,6 +50,11 @@ public class GraalJsAdapter implements ScriptingPort {
                 .build()) {
 
             context.initialize("js");
+
+            // Expose the facade as the global "services" object — the only host
+            // object reachable from scripts. allowHostClassLookup(false) prevents
+            // scripts from loading arbitrary Java classes.
+            context.getBindings("js").putMember("services", scriptServices);
 
             Value result = context.eval("js", script);
             String value = result.isNull() ? null : result.toString();

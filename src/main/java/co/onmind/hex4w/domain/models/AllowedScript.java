@@ -13,7 +13,8 @@ import java.util.stream.Collectors;
 public enum AllowedScript {
 
     HELLO("hello.js"),
-    EXAMPLE("example.js");
+    EXAMPLE("example.js"),
+    SERVICES_DEMO("services-demo.js");
 
     private final String fileName;
 

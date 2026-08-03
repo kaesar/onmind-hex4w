@@ -15,6 +15,7 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **GraphQL BFF**: Endpoint GraphQL como Backend For Frontend sobre XDB (/abc)
 - **gRPC Client**: Adaptador cliente gRPC para consumir XDB vía protobuf (perfil `grpc`, puerto 9991)
 - **Circuit Breaker**: resilience4j en adaptadores de infraestructura (AbcAdapter, LambdaAsyncAdapter, S3StoreAdapter; excluye SmtpEmailAdapter)
+- **Scripts con acceso a infraestructura**: GraalVM JS scripts pueden usar servicios XDB, Lambda, S3, Eventos, Email, Cache vía facade
 
 ## Requisitos Previos
 
@@ -1304,3 +1305,85 @@ public class MyUseCase {
 response payload de la Lambda. Si Lambda devuelve `functionError`, se lanza
 `RuntimeException`. El `LambdaAsyncClient` se configura como un `@Bean` en
 `WebClientConfiguration` (region + endpointOverride configurable).
+
+## Scripts con Acceso a Infraestructura (Opción A: HostProxy)
+
+Los scripts JavaScript (GraalVM/GraalJS) pueden interactuar con la
+infraestructura disponible a través del facade `ScriptServicesPort`, expuesto
+como el objeto global `services` dentro del contexto de ejecución.
+
+### Seguridad
+
+| Medida | Valor |
+|---|---|
+| `HostAccess` | `HostAccess.ALL` (pero solo el facade está en el contexto) |
+| `allowHostClassLookup` | `false` (no se pueden cargar clases Java arbitrarias) |
+| `allowHostClassLoading` | `false` |
+| `allowIO` | `false` (sin acceso a archivos del host) |
+| `allowCreateThread` | `false` |
+| `allowNativeAccess` | `false` |
+
+Los scripts **solo pueden** usar los métodos públicos del facade. No pueden
+acceder a `java.lang.Runtime`, leer archivos, abrir sockets, etc.
+
+### API `services.*`
+
+| Método | Descripción | Puerto subyacente |
+|---|---|---|
+| `abcSheet(show, from, some)` | Query XDB /abc (read) | `AbcPort.sheet()` |
+| `abcExec(what, from, some, with, puts)` | XDB /abc (write/exec) | `AbcPort.exec()` |
+| `publish(topic, key, payload)` | Publicar evento | `EventPublisherPort` (Kafka/SQS/SNS/EventBridge/RabbitMQ) |
+| `invoke(functionName, payload)` | Invocar Lambda | `LambdaPort` |
+| `listItems(bucket)` | Listar objetos S3 | `StorePort` |
+| `sendEmail(to, subject, body)` | Enviar email | `EmailPort` |
+| `cacheGet(key)` | Leer cache Redis | `CachePort` |
+| `cacheSet(key, value)` | Escribir cache (TTL 5 min) | `CachePort` |
+| `cacheEvict(key)` | Borrar cache | `CachePort` |
+
+Los métodos son **síncronos** (bloquean el `Mono`/`Flux` interno). Esto es seguro
+porque los scripts se ejecutan en `Schedulers.boundedElastic()`.
+
+### Ejemplo
+
+```javascript
+// Read from XDB
+const sheet = services.abcSheet("id,name", "xykit", "sheet");
+console.log("Sheet:", JSON.stringify(sheet));
+
+// Publish an event
+services.publish("script.results", "script-1", JSON.stringify({ ok: true }));
+
+// Invoke Lambda
+const result = services.invoke("my-function", JSON.stringify({ action: "ping" }));
+
+// Cache
+services.cacheSet("last-run", "2026-08-01");
+const cached = services.cacheGet("last-run");
+```
+
+Ejecutarlo:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/scripts/execute \
+  -H "Content-Type: application/json" \
+  -d '{"script":"services-demo.js"}'
+```
+
+### Transporte XDB (HTTP vs gRPC)
+
+El facade inyecta `AbcPort`, que Spring resuelve según perfil:
+
+| Perfil | Transporte | Bean `@Primary` |
+|---|---|---|
+| Default | HTTP/WebClient | `AbcAdapter` |
+| `grpc` | gRPC (puerto 9991) | `GrpcAbcAdapter` |
+
+```bash
+# HTTP (default)
+./gradlew bootRun --spring.profiles.active=dev
+
+# gRPC
+./gradlew bootRun --spring.profiles.active=dev,grpc
+```
+
+El script usa `services.abcSheet(...)` sin cambios — el transporte es transparente.
