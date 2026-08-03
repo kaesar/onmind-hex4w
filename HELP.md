@@ -13,6 +13,8 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **Manejo de Errores Reactivo**: Manejo centralizado de excepciones con GlobalErrorHandler
 - **Logging Reactivo**: Aspectos de logging adaptados para programación reactiva
 - **GraphQL BFF**: Endpoint GraphQL como Backend For Frontend sobre XDB (/abc)
+- **gRPC Client**: Adaptador cliente gRPC para consumir XDB vía protobuf (perfil `grpc`, puerto 9991)
+- **Circuit Breaker**: resilience4j en adaptadores de infraestructura (AbcAdapter, LambdaAsyncAdapter, S3StoreAdapter; excluye SmtpEmailAdapter)
 
 ## Requisitos Previos
 
@@ -53,8 +55,9 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
   |   |   `-- repositories/     # Repositorios R2DBC
   |   |-- cache/                # Adaptadores de cache (Redis)
   |   `-- webclients/           # Clientes web reactivos para servicios externos
-  |       |-- AbcAdapter        # Adaptador para XDB (implementa AbcPort para /abc)
-  |       `-- CachedAbcAdapter  # Decorator: cachea responses de /abc via Redis
+  |       |-- AbcAdapter          # Adaptador para XDB HTTP (implementa AbcPort)
+  |       |-- GrpcAbcAdapter      # Adaptador para XDB gRPC (implementa AbcPort, perfil 'grpc')
+  |       `-- CachedAbcAdapter    # Decorator: cachea responses de /abc via Redis
   `-- transverse/               # Componentes Transversales
       |-- exceptions/           # Manejo global de errores reactivo (GlobalErrorHandler)
       `-- logging/              # Aspectos de logging reactivos
@@ -253,6 +256,7 @@ curl http://localhost:8080/actuator/health
 | `GET` | `/api/v1/xdb/sheet` | Listar hojas XDB (prueba AbcWebClient) | - | `SheetResponseDto` |
 | `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
 | `POST` | `/graphql` | Endpoint GraphQL (BFF sobre XDB) — habilitado con `app.graphql.enabled=true` | GraphQL query | GraphQL response |
+| `gRPC` | `localhost:9991` | Cliente gRPC hacia XDB — habilitado con perfil `grpc` | `AbcRequest` proto | `AbcResponse` proto |
 
 ### Ejemplos de Uso
 
@@ -648,6 +652,82 @@ app:
 ```
 
 - `EventBridgeEventSenderAdapter` — publica eventos vía `PutEventsRequest`. El `topic` se mapea a `eventBusName`. Campos: `detailType`="ScriptExecution", `source`="hex4w.application", `detail`=payload.
+
+### gRPC (opcional, perfil `grpc`)
+
+Adaptador cliente gRPC para consumir XDB vía protocol buffers en lugar de HTTP.
+Paralelo al adaptador REST (`AbcWebClient`/`AbcAdapter`), implementa `AbcPort`
+usando el stub async de gRPC — no bloqueante y compatible con WebFlux.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,grpc
+```
+
+#### Dependencias
+
+```gradle
+implementation 'io.grpc:grpc-netty-shaded:1.69.1'
+implementation 'io.grpc:grpc-protobuf:1.69.1'
+implementation 'io.grpc:grpc-stub:1.69.1'
+implementation 'com.google.protobuf:protobuf-java:3.25.5'
+implementation files('../api/xdb/build/libs/onmind-xdb-1.0.0-early2026.jar')
+```
+
+El JAR de xdb contiene las clases proto generadas (`AbcServiceGrpc`, `AbcRequest`, `AbcResponse`).
+Las versiones de gRPC y protobuf coinciden con las de `api/xdb`.
+
+#### Configuración
+
+```yaml
+app:
+  xdb:
+    grpc:
+      host: localhost
+      port: 9991
+```
+
+XDB abre el listener gRPC en el puerto 9991 (configurado en `api/xdb`).
+
+#### Cómo funciona
+
+1. `GrpcConfiguration` (perfil `grpc`) crea un `ManagedChannel` (Netty, plaintext)
+   y el `AbcServiceStub` async.
+2. `GrpcAbcAdapter` implementa `AbcPort`:
+   - `sheet(show, from, some)` → construye `AbcRequest` con `what=find`, llama
+     gRPC `Execute`, mapea `AbcResponse` proto → `AbcResponse` DTO.
+   - `exec(request)` → mapea campos `AbcRequest` HTTP a proto `AbcRequest`,
+     llama gRPC `Execute`.
+3. El bean `AbcPort @Primary` en `GrpcConfiguration` envuelve `GrpcAbcAdapter`
+   con `CachedAbcAdapter` (cache de lecturas, igual que con el adaptador HTTP).
+4. Circuit Breaker: `grpc-abc` (comparte configuración con `abc`, `lambda`, `s3`).
+
+#### Mapeo de campos
+
+| HTTP AbcRequest | gRPC AbcRequest proto |
+|---|---|
+| way, what, from, some, with, show, call, puts | → mismo nombre en proto |
+| where, sort, limit, offset | → codificados dentro de `puts` JSON |
+
+Los campos `where`, `sort`, `limit`, `offset` no existen en el proto gRPC —
+se combinan con `puts` como un JSON unificado (ej. `{"where":{...}, "limit":10, ...}`).
+
+#### Adaptador gRPC sobre EFS (opcional)
+
+EFS (Elastic File System) es un sistema de archivos NFS montado en el host.
+No se necesita un adapter AWS SDK para operaciones de archivo — funciona con
+`java.nio.file` estándar. Si EFS está montado (ej. en `/mnt/efs/scripts/`):
+
+```yaml
+app:
+  scripts:
+    location: file:/mnt/efs/scripts/
+```
+
+`ClasspathScriptSourceAdapter` usa `java.nio.file.Paths` — funciona con EFS
+transparentemente. El AWS SDK (`EfsClient`) solo se usa para operaciones de
+gestión (create/delete filesystem), no para I/O de archivos.
 
 ### Redis Cache (opcional)
 

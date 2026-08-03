@@ -94,7 +94,10 @@ app:
   xdb:
     # XDB ABC API base URL
     base-url: http://localhost:9990
-    # Optional: "none" (default), "bearer", "basic"
+    # gRPC endpoint (activate with profile 'grpc' — uses gRPC instead of HTTP)
+    grpc:
+      host: localhost
+      port: 9991
     auth-type: basic
     # Token value for bearer/basic (leave empty for none)
     auth-token: admin:admin 

@@ -250,6 +250,7 @@ public class WebClientConfiguration {
     }
 
     @Bean
+    @org.springframework.context.annotation.Profile("!grpc")
     public co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter(
             co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient,
             CircuitBreaker abcCircuitBreaker) {
@@ -257,6 +258,7 @@ public class WebClientConfiguration {
     }
 
     @Bean
+    @org.springframework.context.annotation.Profile("!grpc")
     @org.springframework.context.annotation.Primary
     public AbcPort abcPort(
             co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter,
