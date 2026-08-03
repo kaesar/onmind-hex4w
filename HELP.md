@@ -949,6 +949,45 @@ public class UserRouterConfiguration {
 5. **Backpressure**: Considerar estrategias de backpressure para streams grandes
 6. **Schedulers**: Usar schedulers apropiados para operaciones CPU-intensivas
 
+## Resilience (Circuit Breaker)
+
+Adaptadores de infraestructura que llaman servicios externos están protegidos con
+**Circuit Breaker** vía Resilience4j. El bean `CircuitBreakerGeneric` en
+`transverse/resilience/` envuelve `Mono`/`Flux` con `CircuitBreakerOperator`.
+
+### Dependencia
+
+```gradle
+implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
+implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+```
+
+### Configuración de Circuit Breakers
+
+Los beans se definen en `WebClientConfiguration` con la misma configuración base:
+
+| Bean | Servicio protegido |
+|---|---|
+| `abcCircuitBreaker` | XDB `/abc` (HTTP) |
+| `lambdaCircuitBreaker` | AWS Lambda invocation |
+| `s3CircuitBreaker` | AWS S3 operations |
+
+Config: failure-rate 50%, window 10, min 5 calls, 30s open, 3 half-open calls.
+
+### Adaptadores con Circuit Breaker
+
+| Adaptador | Bean inyectado |
+|---|---|
+| `AbcAdapter` | `abcCircuitBreaker` |
+| `LambdaAsyncAdapter` | `lambdaCircuitBreaker` |
+| `S3StoreAdapter` | `s3CircuitBreaker` |
+
+### Adaptadores SIN Circuit Breaker
+
+| Adaptador | Razón |
+|---|---|
+| `SmtpEmailAdapter` | Email es best-effort; SMTP lento pero funcional no debe bloquear entrega. Retry es preferible a fast-fail. |
+
 ## Notificaciones (Email)
 
 ### Arquitectura

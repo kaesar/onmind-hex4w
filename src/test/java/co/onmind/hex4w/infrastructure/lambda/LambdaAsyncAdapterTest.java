@@ -1,6 +1,7 @@
 package co.onmind.hex4w.infrastructure.lambda;
 
 import co.onmind.hex4w.application.ports.out.LambdaPort;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,10 +28,12 @@ class LambdaAsyncAdapterTest {
     private LambdaAsyncClient lambdaClient;
 
     private LambdaPort adapter;
+    private CircuitBreaker circuitBreaker;
 
     @BeforeEach
     void setUp() {
-        adapter = new LambdaAsyncAdapter(lambdaClient);
+        circuitBreaker = CircuitBreaker.ofDefaults("lambda");
+        adapter = new LambdaAsyncAdapter(lambdaClient, circuitBreaker);
     }
 
     @Test

@@ -17,6 +17,9 @@ import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.lambda.LambdaAsyncClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 
 import java.net.URI;
 import java.time.Duration;
@@ -248,8 +251,9 @@ public class WebClientConfiguration {
 
     @Bean
     public co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter(
-            co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient) {
-        return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient);
+            co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient,
+            CircuitBreaker abcCircuitBreaker) {
+        return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient, abcCircuitBreaker);
     }
 
     @Bean
@@ -298,6 +302,31 @@ public class WebClientConfiguration {
         }
 
         return builder.build();
+    }
+
+    private static CircuitBreakerConfig createCircuitBreakerConfig() {
+        return CircuitBreakerConfig.custom()
+                .failureRateThreshold(50)
+                .slidingWindowSize(10)
+                .minimumNumberOfCalls(5)
+                .waitDurationInOpenState(java.time.Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(3)
+                .build();
+    }
+
+    @Bean
+    public CircuitBreaker abcCircuitBreaker() {
+        return CircuitBreaker.of("abc", createCircuitBreakerConfig());
+    }
+
+    @Bean
+    public CircuitBreaker lambdaCircuitBreaker() {
+        return CircuitBreaker.of("lambda", createCircuitBreakerConfig());
+    }
+
+    @Bean
+    public CircuitBreaker s3CircuitBreaker() {
+        return CircuitBreaker.of("s3", createCircuitBreakerConfig());
     }
 
     /**

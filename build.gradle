@@ -65,6 +65,10 @@ dependencies {
 
     // Spring for GraphQL (BFF endpoint exposing /abc as GraphQL)
     implementation 'org.springframework.boot:spring-boot-starter-graphql'
+    
+    // Resilience4j — Circuit Breaker and Retry for reactive adapters
+    implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
 
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
