@@ -12,6 +12,7 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **Integración MapStruct**: Mapeo automático entre DTOs y modelos de dominio
 - **Manejo de Errores Reactivo**: Manejo centralizado de excepciones con GlobalErrorHandler
 - **Logging Reactivo**: Aspectos de logging adaptados para programación reactiva
+- **GraphQL BFF**: Endpoint GraphQL como Backend For Frontend sobre XDB (/abc)
 
 ## Requisitos Previos
 
@@ -42,8 +43,8 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
   |       `-- out/              # Puertos de salida reactivos (Repositories)
   |-- infrastructure/           # Capa de Infraestructura (Adapters)
   |   |-- configuration/        # Configuraciones de Spring WebFlux
-  |   |-- handlers/             # Handlers reactivos (en lugar de controllers)
-  |   |-- events/               # Eventos Kafka
+  |   |-- handlers/             # Handlers reactivos (RouterFunction + ServerResponse)
+  |   |-- events/               # Eventos (Kafka, SQS, SNS, EventBridge)
   |   |-- persistence/          # Implementaciones de persistencia R2DBC
   |   |   |-- adapters/         # Adaptadores de repositorio
   |   |   |-- entities/         # Entidades R2DBC
@@ -250,6 +251,7 @@ curl http://localhost:8080/actuator/health
 | `POST` | `/api/v1/scripts/execute` | Ejecutar archivo `.js` whitelisteado (GraalJS) | `{ "script": "hello.js" }` | `ScriptResultResponseDto` |
 | `GET` | `/api/v1/xdb/sheet` | Listar hojas XDB (prueba AbcWebClient) | - | `SheetResponseDto` |
 | `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
+| `POST` | `/graphql` | Endpoint GraphQL (BFF sobre XDB) — habilitado con `app.graphql.enabled=true` | GraphQL query | GraphQL response |
 
 ### Ejemplos de Uso
 
@@ -530,6 +532,69 @@ Error:
 - Kafka deshabilitado por defecto (no requiere broker). `application.yml` excluye `KafkaAutoConfiguration`.
 - Perfil `kafka` lo rehabilita y activa `ScriptKafkaConsumer`.
 - Dependencia: `org.springframework.kafka:spring-kafka`.
+
+### AWS SQS (opcional, perfil `sqs`)
+
+Adaptadores reactivos para colas SQS usando `SqsAsyncClient` del AWS SDK v2.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,sqs
+```
+
+#### Configuración
+
+```yaml
+app:
+  sqs:
+    queue-url: https://sqs.us-east-1.amazonaws.com/123/my-queue
+    topic:
+      script-results: https://sqs.us-east-1.amazonaws.com/123/results
+```
+
+- `SqsEventSenderAdapter` — publica eventos a SQS implementando `EventPublisherPort`. El `topic` se mapea a `queueUrl`; el `key` como atributo de mensaje.
+- `SqsEventConsumerAdapter` — consume mensajes SQS: poll → deserializa `KafkaScriptCommand` → ejecuta script vía `ExecuteScriptTrait` → publica resultado vía `EventPublisherPort` → borra mensaje de la cola. En fallo de deserialización: borra el mensaje (poison cleanup). En fallo de ejecución: no borra (permite reprocessing).
+
+### AWS SNS (opcional, perfil `sns`)
+
+Adaptador reactivo para topics SNS usando `SnsAsyncClient`.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,sns
+```
+
+#### Configuración
+
+```yaml
+app:
+  sns:
+    topic-arn: arn:aws:sns:us-east-1:123:my-topic
+```
+
+- `SnsEventSenderAdapter` — publica eventos a SNS implementando `EventPublisherPort`. El `topic` se mapea a `topicArn`.
+
+### AWS EventBridge (opcional, perfil `eventbridge`)
+
+Adaptador reactivo para buses de eventos usando `EventBridgeAsyncClient`.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,eventbridge
+```
+
+#### Configuración
+
+```yaml
+app:
+  eventbridge:
+    bus: default
+```
+
+- `EventBridgeEventSenderAdapter` — publica eventos vía `PutEventsRequest`. El `topic` se mapea a `eventBusName`. Campos: `detailType`="ScriptExecution", `source`="hex4w.application", `detail`=payload.
 
 ### Redis Cache (opcional)
 
