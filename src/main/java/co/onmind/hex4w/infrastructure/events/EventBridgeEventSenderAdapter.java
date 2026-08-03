@@ -50,6 +50,7 @@ public class EventBridgeEventSenderAdapter implements EventPublisherPort {
                 logger.error("Failed to publish EventBridge event to {}: {}", eventBus, error.getMessage());
                 throw new RuntimeException("EventBridge publish failed", error);
             }
-            logger.debug("EventBridge event published to {}, eventId={}", eventBus, result.entries().get(0).eventId());        });
+            logger.debug("EventBridge event published to {}, eventId={}", eventBus, result.entries().get(0).eventId());
+        });
     }
 }

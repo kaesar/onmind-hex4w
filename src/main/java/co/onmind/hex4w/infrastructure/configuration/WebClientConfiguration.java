@@ -14,6 +14,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
+import software.amazon.awssdk.services.lambda.LambdaAsyncClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 
@@ -278,6 +279,22 @@ public class WebClientConfiguration {
 
         if (forcePathStyle) {
             builder.serviceConfiguration(config -> config.pathStyleAccessEnabled(true));
+        }
+
+        return builder.build();
+    }
+
+    @Bean
+    public LambdaAsyncClient lambdaAsyncClient(
+            @Value("${app.lambda.region:us-east-1}") String region,
+            @Value("${app.lambda.endpoint:#{null}}") String endpoint) {
+
+        var builder = LambdaAsyncClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(DefaultCredentialsProvider.create());
+
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder.endpointOverride(URI.create(endpoint));
         }
 
         return builder.build();

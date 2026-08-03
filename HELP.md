@@ -43,7 +43,8 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
   |       `-- out/              # Puertos de salida reactivos (Repositories)
   |-- infrastructure/           # Capa de Infraestructura (Adapters)
   |   |-- configuration/        # Configuraciones de Spring WebFlux
-  |   |-- handlers/             # Handlers reactivos (RouterFunction + ServerResponse)
+  |   |-- handlers/             # Handlers reactivos (RouterFunction + ServerResponse, incluye AbcGraphqlResolver)
+  |   |-- lambda/               # Adaptador para invocacion de Lambda (LambdaAsyncAdapter)
   |   |-- events/               # Eventos (Kafka, SQS, SNS, EventBridge)
   |   |-- persistence/          # Implementaciones de persistencia R2DBC
   |   |   |-- adapters/         # Adaptadores de repositorio
@@ -1099,3 +1100,36 @@ query {
 El query `abcSheets` dispara múltiples llamadas `sheet()` en paralelo (via
 `Flux.flatMap`) y retorna todas las respuestas combinadas. El cache de Redis
 (`CachedAbcAdapter`) aplica a cada sheet individual.
+
+## AWS Lambda (opcional)
+
+Adaptador reactivo para invocación directa de funciones Lambda (sin API Gateway)
+usando `LambdaAsyncClient` del AWS SDK v2. El adapter implementa `LambdaPort`
+(output port genérico).
+
+### Configuración
+
+```yaml
+app:
+  lambda:
+    region: us-east-1
+    endpoint: http://localhost:4566  # LocalStack (opcional)
+```
+
+### Uso
+
+```java
+@Component
+public class MyUseCase {
+    private final LambdaPort lambdaPort;
+
+    public Mono<String> process(String input) {
+        return lambdaPort.invoke("my-function", "{\"input\":\"" + input + "\"}");
+    }
+}
+```
+
+`LambdaPort.invoke(functionName, payload)` retorna `Mono<String>` con el
+response payload de la Lambda. Si Lambda devuelve `functionError`, se lanza
+`RuntimeException`. El `LambdaAsyncClient` se configura como un `@Bean` en
+`WebClientConfiguration` (region + endpointOverride configurable).

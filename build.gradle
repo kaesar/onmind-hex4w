@@ -47,6 +47,7 @@ dependencies {
     implementation 'software.amazon.awssdk:sqs'
     implementation 'software.amazon.awssdk:sns'
     implementation 'software.amazon.awssdk:eventbridge'
+    implementation 'software.amazon.awssdk:lambda'
     implementation 'software.amazon.awssdk:netty-nio-client'
 
     // GraalVM Polyglot SDK for sandboxed JavaScript execution

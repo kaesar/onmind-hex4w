@@ -77,6 +77,9 @@ app:
     region: us-east-1
     endpoint: http://localhost:4566
     force-path-style: true
+  lambda:
+    region: us-east-1
+    endpoint: http://localhost:4566  # LocalStack
   scripts:
     # Directory with .js files (must also be listed in AllowedScript enum)
     location: classpath:scripts/
