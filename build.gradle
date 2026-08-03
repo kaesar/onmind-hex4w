@@ -56,6 +56,17 @@ dependencies {
 
     // Kafka (optional — activate with profile 'kafka')
     implementation 'org.springframework.kafka:spring-kafka'
+    
+    // RabbitMQ (optional — activate with profile 'rabbitmq')
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+    // gRPC client for XDB (optional — activate with profile 'grpc')
+    implementation 'io.grpc:grpc-netty-shaded:1.69.1'
+    implementation 'io.grpc:grpc-protobuf:1.69.1'
+    implementation 'io.grpc:grpc-stub:1.69.1'
+    implementation 'com.google.protobuf:protobuf-java:3.25.5'
+    // xdb JAR provides gRPC proto-generated classes (AbcServiceGrpc, AbcRequest, AbcResponse)
+    implementation files('../api/xdb/build/libs/onmind-xdb-1.0.0-early2026.jar')
 
     // Redis (reactive) for caching layer
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'

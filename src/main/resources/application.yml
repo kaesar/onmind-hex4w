@@ -80,6 +80,14 @@ app:
   lambda:
     region: us-east-1
     endpoint: http://localhost:4566  # LocalStack
+  rabbitmq:
+    host: localhost
+    port: 5672
+    exchange:
+      default: hex4w.script.commands
+      results: hex4w.script.results
+    queue:
+      script-commands: hex4w.script.commands
   scripts:
     # Directory with .js files (must also be listed in AllowedScript enum)
     location: classpath:scripts/

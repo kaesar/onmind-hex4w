@@ -414,6 +414,28 @@ curl "http://localhost:8080/api/v1/store/items?bucket=my-bucket"
 ]
 ```
 
+### AWS EFS (Elastic File System)
+
+EFS es un sistema de archivos NFS montado en el host/container. **No se necesita
+un adapter AWS SDK para operaciones de archivo** (read/write/list) — funciona
+con `java.nio.file` estándar (NIO.2) siempre que EFS esté montado.
+
+#### Configuración (EFS montado en /mnt/efs)
+
+```yaml
+app:
+  scripts:
+    location: file:/mnt/efs/scripts/  # ruta EFS montada
+```
+
+`ClasspathScriptSourceAdapter` usa `java.nio.file.Paths` — funciona con EFS
+transparentemente. Si la ruta no existe (EFS no montado en local), el adapter
+caerá al classpath (`classpath:scripts/`).
+
+**Nota:** El AWS SDK (`software.amazon.awssdk.services.efs.EfsClient`) solo se
+usa para operaciones de gestión (create/delete filesystem), no para I/O de
+archivos.
+
 ## Configuración
 
 ### Dependencias Reactivas Principales
@@ -556,6 +578,36 @@ app:
 
 - `SqsEventSenderAdapter` — publica eventos a SQS implementando `EventPublisherPort`. El `topic` se mapea a `queueUrl`; el `key` como atributo de mensaje.
 - `SqsEventConsumerAdapter` — consume mensajes SQS: poll → deserializa `KafkaScriptCommand` → ejecuta script vía `ExecuteScriptTrait` → publica resultado vía `EventPublisherPort` → borra mensaje de la cola. En fallo de deserialización: borra el mensaje (poison cleanup). En fallo de ejecución: no borra (permite reprocessing).
+
+### RabbitMQ (opcional, perfil `rabbitmq`)
+
+Adaptadores para RabbitMQ usando Spring AMQP (`RabbitTemplate` + `@RabbitListener`). El patrón es idéntico al de Kafka.
+
+#### Activación
+
+```bash
+./gradlew bootRun --spring.profiles.active=dev,rabbitmq
+```
+
+#### Configuración
+
+```yaml
+spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+
+app:
+  rabbitmq:
+    exchange:
+      default: hex4w.script.commands
+      results: hex4w.script.results
+    queue:
+      script-commands: hex4w.script.commands
+```
+
+- `RabbitMQEventPublisherAdapter` — publica eventos implementando `EventPublisherPort`. El `topic` se mapea a `exchange`; el `key` a `routingKey`.
+- `RabbitMQEventConsumerAdapter` — consume mensajes via `@RabbitListener`, deserializa `KafkaScriptCommand`, ejecuta script vía `ExecuteScriptTrait`, publica resultado vía `EventPublisherPort`.
 
 ### AWS SNS (opcional, perfil `sns`)
 
