@@ -105,6 +105,16 @@ class ScriptServicesFacadeTest {
     }
 
     @Test
+    @DisplayName("invokeAsync delegates to LambdaPort.invokeAsync and blocks")
+    void invokeAsyncDelegates() {
+        when(lambdaPort.invokeAsync("my-func", "{\"action\":\"fire\"}"))
+            .thenReturn(Mono.empty());
+
+        facade.invokeAsync("my-func", "{\"action\":\"fire\"}");
+        verify(lambdaPort).invokeAsync("my-func", "{\"action\":\"fire\"}");
+    }
+
+    @Test
     @DisplayName("listItems collects Flux to List and blocks")
     void listItemsCollectsFlux() {
         List<StoreItem> mockItems = List.of(

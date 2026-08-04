@@ -85,6 +85,11 @@ public class ScriptServicesFacade implements ScriptServicesPort {
     }
 
     @Override
+    public void invokeAsync(String functionName, String payload) {
+        lambdaPort.invokeAsync(functionName, payload).block();
+    }
+
+    @Override
     public List<StoreItem> listItems(String bucket) {
         return storePort.listItems(bucket).collectList().block();
     }

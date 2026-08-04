@@ -14,7 +14,7 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **Logging Reactivo**: Aspectos de logging adaptados para programación reactiva
 - **GraphQL BFF**: Endpoint GraphQL como Backend For Frontend sobre XDB (/abc)
 - **gRPC Client**: Adaptador cliente gRPC para consumir XDB vía protobuf (perfil `grpc`, puerto 9991)
-- **Circuit Breaker**: resilience4j en adaptadores de infraestructura (AbcAdapter, LambdaAsyncAdapter, S3StoreAdapter; excluye SmtpEmailAdapter)
+- **Circuit Breaker**: resilience4j en adaptadores de infraestructura (AbcAdapter, LambdaAdapter, S3StoreAdapter; excluye SmtpEmailAdapter)
 - **Scripts con acceso a infraestructura**: GraalVM JS scripts pueden usar servicios XDB, Lambda, S3, Eventos, Email, Cache vía facade
 
 ## Requisitos Previos
@@ -47,7 +47,7 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
   |-- infrastructure/           # Capa de Infraestructura (Adapters)
   |   |-- configuration/        # Configuraciones de Spring WebFlux
   |   |-- handlers/             # Handlers reactivos (RouterFunction + ServerResponse, incluye AbcGraphqlResolver)
-  |   |-- lambda/               # Adaptador para invocacion de Lambda (LambdaAsyncAdapter)
+  |   |-- lambda/               # Adaptador para invocacion de Lambda (LambdaAdapter)
   |   |-- events/               # Eventos (Kafka, SQS, SNS, EventBridge)
   |   |-- persistence/          # Implementaciones de persistencia R2DBC
   |   |   |-- adapters/         # Adaptadores de repositorio
@@ -253,7 +253,7 @@ curl http://localhost:8080/actuator/health
 | `GET`  | `/api/v1/roles` | Obtener todos los roles | - | `Flux<RoleResponseDto>` |
 | `GET`  | `/api/v1/roles/{id}` | Obtener role por ID | - | `RoleResponseDto` |
 | `GET`  | `/api/v1/roles/search?name={pattern}` | Buscar roles por patrón de nombre | - | `Flux<RoleResponseDto>` |
-| `POST` | `/api/v1/scripts/execute` | Ejecutar archivo `.js` whitelisteado (GraalJS) | `{ "script": "hello.js" }` | `ScriptResultResponseDto` |
+| `POST` | `/api/v1/script/execute` | Ejecutar archivo `.js` whitelisteado (GraalJS) | `{ "script": "hello.js" }` | `ScriptResultResponseDto` |
 | `GET` | `/api/v1/xdb/sheet` | Listar hojas XDB (prueba AbcWebClient) | - | `SheetResponseDto` |
 | `GET`  | `/api/v1/store/items?bucket={name}` | Listar objetos de un bucket S3 | - | `Flux<StoreItemResponseDto>` |
 | `POST` | `/graphql` | Endpoint GraphQL (BFF sobre XDB) — habilitado con `app.graphql.enabled=true` | GraphQL query | GraphQL response |
@@ -310,22 +310,28 @@ curl "http://localhost:8080/api/v1/roles/search?name=ADM"
 
 #### Ejecutar Script JavaScript (archivo whitelisteado)
 
-Ruta: `POST /api/v1/scripts/execute`  
+Ruta: `POST /api/v1/script/execute`  
 Body: `{ "script": "<nombre-archivo.js>" }` → `{ value, stdout, stderr }`
 
-Solo se ejecutan archivos listados en el enum `AllowedScript` y presentes en
+Solo se ejecutan archivos listados en `app.scripts.whitelist` (application.yml) y presentes en
 `src/main/resources/scripts/` (config: `app.scripts.location`).
 
-| Archivo | Enum |
-|---------|------|
-| `hello.js` | `AllowedScript.HELLO` |
-| `example.js` | `AllowedScript.EXAMPLE` |
+| Archivo |
+|---------|
+| `hello.js` |
+| `example.js` |
+| `services.js` |
 
-```bash
-curl -X POST http://localhost:8080/api/v1/scripts/execute \
-  -H "Content-Type: application/json" \
-  -d '{"script": "hello.js"}'
+```yaml
+# application.yml
+app:
+  scripts:
+    location: classpath:scripts/
+    whitelist: hello.js,example.js,services.js
 ```
+
+Para registrar un nuevo script: agregar el nombre a la lista `whitelist` (sin recompilar).
+Para sobre-escribir en runtime: `--app.scripts.whitelist=hello.js,services.js`, o vía env var.
 
 **Respuesta** (ejemplo):
 ```json
@@ -336,8 +342,8 @@ curl -X POST http://localhost:8080/api/v1/scripts/execute \
 }
 ```
 
-Flujo: nombre → whitelist (`AllowedScript`) → carga classpath → `GraalJsAdapter` (sandbox).  
-Para ABCode: transpilar a `.js`, copiar a `scripts/` y registrar el nombre en el enum.  
+Flujo: nombre → `ScriptWhitelist` (scripts.ini) → carga classpath → `GraalJsAdapter` (sandbox).  
+Para ABCode: transpilar a `.js`, copiar a `scripts/` y agregar nombre a `scripts.ini`.  
 Nombre no permitido → `403 SCRIPT_NOT_ALLOWED`.
 
 #### XDB - Sheet (XdbcUseCase + AbcWebClient)
@@ -1112,7 +1118,7 @@ Config: failure-rate 50%, window 10, min 5 calls, 30s open, 3 half-open calls.
 | Adaptador | Bean inyectado |
 |---|---|
 | `AbcAdapter` | `abcCircuitBreaker` |
-| `LambdaAsyncAdapter` | `lambdaCircuitBreaker` |
+| `LambdaAdapter` | `lambdaCircuitBreaker` |
 | `S3StoreAdapter` | `s3CircuitBreaker` |
 
 ### Adaptadores SIN Circuit Breaker
@@ -1333,7 +1339,8 @@ acceder a `java.lang.Runtime`, leer archivos, abrir sockets, etc.
 | `abcSheet(show, from, some)` | Query XDB /abc (read) | `AbcPort.sheet()` |
 | `abcExec(what, from, some, with, puts)` | XDB /abc (write/exec) | `AbcPort.exec()` |
 | `publish(topic, key, payload)` | Publicar evento | `EventPublisherPort` (Kafka/SQS/SNS/EventBridge/RabbitMQ) |
-| `invoke(functionName, payload)` | Invocar Lambda | `LambdaPort` |
+| `invoke(functionName, payload)` | Invocar Lambda (síncrono, espera respuesta) | `LambdaPort.invoke()` |
+| `invokeAsync(functionName, payload)` | Invocar Lambda (fire-and-forget, `InvocationType.EVENT`) | `LambdaPort.invokeAsync()` |
 | `listItems(bucket)` | Listar objetos S3 | `StorePort` |
 | `sendEmail(to, subject, body)` | Enviar email | `EmailPort` |
 | `cacheGet(key)` | Leer cache Redis | `CachePort` |
@@ -1364,14 +1371,14 @@ const cached = services.cacheGet("last-run");
 Ejecutarlo:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/scripts/execute \
+curl -X POST http://localhost:8080/api/v1/script/execute \
   -H "Content-Type: application/json" \
-  -d '{"script":"services-demo.js"}'
+  -d '{"script":"services.js"}'
 ```
 
 ### Transporte XDB (HTTP vs gRPC)
 
-El facade inyecta `AbcPort`, que Spring resuelve según perfil:
+  El facade inyecta `AbcPort`, que Spring resuelve según perfil:
 
 | Perfil | Transporte | Bean `@Primary` |
 |---|---|---|
@@ -1385,5 +1392,14 @@ El facade inyecta `AbcPort`, que Spring resuelve según perfil:
 # gRPC
 ./gradlew bootRun --spring.profiles.active=dev,grpc
 ```
+
+El script usa `services.abcSheet(...)` sin cambios — el transporte es transparente.
+
+### Invoke Lambda: síncrono vs fire-and-forget
+
+| Método | InvocationType | Comportamiento |
+|---|---|---|
+| `services.invoke(fn, payload)` | `REQUEST_RESPONSE` (default) | Espera a que Lambda termine y devuelve el payload |
+| `services.invokeAsync(fn, payload)` | `EVENT` | AWS encola el evento y devuelve inmediatamente (202 Accepted) |
 
 El script usa `services.abcSheet(...)` sin cambios — el transporte es transparente.

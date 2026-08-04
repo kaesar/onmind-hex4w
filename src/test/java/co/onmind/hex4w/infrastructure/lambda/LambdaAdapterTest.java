@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.lambda.LambdaAsyncClient;
+import software.amazon.awssdk.services.lambda.model.InvocationType;
 import software.amazon.awssdk.services.lambda.model.InvokeRequest;
 import software.amazon.awssdk.services.lambda.model.InvokeResponse;
 import software.amazon.awssdk.services.lambda.model.LambdaException;
@@ -22,7 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class LambdaAsyncAdapterTest {
+class LambdaAdapterTest {
 
     @Mock
     private LambdaAsyncClient lambdaClient;
@@ -33,7 +34,7 @@ class LambdaAsyncAdapterTest {
     @BeforeEach
     void setUp() {
         circuitBreaker = CircuitBreaker.ofDefaults("lambda");
-        adapter = new LambdaAsyncAdapter(lambdaClient, circuitBreaker);
+        adapter = new LambdaAdapter(lambdaClient, circuitBreaker);
     }
 
     @Test
@@ -122,5 +123,55 @@ class LambdaAsyncAdapterTest {
         InvokeRequest sent = captor.getValue();
         assertThat(sent.functionName()).isEqualTo("my-func");
         assertThat(sent.payload().asUtf8String()).isEqualTo("{\"key\":\"value\"}");
+    }
+
+    @Test
+    @DisplayName("invokeAsync uses InvocationType.EVENT and returns Mono<Void>")
+    void invokeAsyncUsesEventInvocationType() {
+        InvokeResponse mockResponse = InvokeResponse.builder()
+                .statusCode(202)
+                .build();
+        when(lambdaClient.invoke(any(InvokeRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(mockResponse));
+
+        StepVerifier.create(adapter.invokeAsync("my-func", "{\"action\":\"ping\"}"))
+                .verifyComplete();
+
+        var captor = org.mockito.ArgumentCaptor.forClass(InvokeRequest.class);
+        verify(lambdaClient).invoke(captor.capture());
+
+        InvokeRequest sent = captor.getValue();
+        assertThat(sent.functionName()).isEqualTo("my-func");
+        assertThat(sent.invocationType()).isEqualTo(InvocationType.EVENT);
+        assertThat(sent.payload().asUtf8String()).isEqualTo("{\"action\":\"ping\"}");
+    }
+
+    @Test
+    @DisplayName("invokeAsync propagates LambdaException")
+    void invokeAsyncPropagatesExceptions() {
+        when(lambdaClient.invoke(any(InvokeRequest.class)))
+                .thenReturn(CompletableFuture.failedFuture(
+                        LambdaException.builder().message("Throttle").build()));
+
+        StepVerifier.create(adapter.invokeAsync("my-func", "{}"))
+                .expectErrorMatches(error ->
+                        error instanceof RuntimeException &&
+                        error.getMessage().contains("Lambda invocation failed"))
+                .verify();
+    }
+
+    @Test
+    @DisplayName("invokeAsync uses circuitBreaker")
+    void invokeAsyncUsesCircuitBreaker() {
+        adapter = new LambdaAdapter(lambdaClient, CircuitBreaker.ofDefaults("lambda"));
+
+        InvokeResponse mockResponse = InvokeResponse.builder().statusCode(202).build();
+        when(lambdaClient.invoke(any(InvokeRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(mockResponse));
+
+        StepVerifier.create(adapter.invokeAsync("my-func", "{}"))
+                .verifyComplete();
+
+        verify(lambdaClient).invoke(any(InvokeRequest.class));
     }
 }

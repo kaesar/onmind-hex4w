@@ -23,7 +23,7 @@ console.log("Insert result:", JSON.stringify(insertResult));
 services.publish(
   "hex4w.script.events",
   "script-complete",
-  JSON.stringify({ script: "services-demo.js", ok: true })
+  JSON.stringify({ script: "services.js", ok: true })
 );
 
 // --- Lambda ---
@@ -33,6 +33,13 @@ const lambdaResult = services.invoke(
 );
 console.log("Lambda result:", lambdaResult);
 
+// Fire-and-forget Lambda (InvocationType.EVENT)
+services.invokeAsync(
+  "my-function",
+  JSON.stringify({ action: "fire" })
+);
+console.log("Lambda async invoked (fire-and-forget)");
+
 // --- Storage (S3) ---
 const items = services.listItems("my-bucket");
 console.log("S3 items:", items);
@@ -41,7 +48,7 @@ console.log("S3 items:", items);
 services.sendEmail(
   "admin@example.com",
   "Script alert",
-  "Script services-demo.js executed successfully."
+  "Script services.js executed successfully."
 );
 
 // --- Cache (Redis) ---

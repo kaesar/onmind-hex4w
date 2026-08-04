@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.14'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'jacoco'
 }
 
 group = 'co.onmind'
@@ -103,3 +104,46 @@ tasks.named('test') {
 
 // Ensure proper compilation order
 compileJava.dependsOn processResources
+
+// JaCoCo — code coverage focused on infrastructure adapters
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+    afterEvaluate {
+        classDirectories.setFrom(files(
+            classDirectories.files.collect { file ->
+                fileTree(dir: file, include: [
+                    'co/onmind/hex4w/infrastructure/**/*Adapter.class',
+                    'co/onmind/hex4w/infrastructure/scripts/ScriptServicesFacade.class',
+                    'co/onmind/hex4w/infrastructure/configuration/WebClientConfiguration.class'
+                ])
+            }
+        ))
+    }
+}
+
+jacocoTestCoverageVerification {
+    dependsOn jacocoTestReport
+    violationRules {
+        rule {
+            // Aggregate line coverage over the infrastructure adapters only.
+            // BUNDLE aggregates all included adapter classes into one ratio,
+            // matching the same class set measured in jacocoTestReport.
+            element = 'BUNDLE'
+            includes = ['co.onmind.hex4w.infrastructure.**']
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.8
+            }
+        }
+    }
+}
+
+check {
+    dependsOn jacocoTestCoverageVerification
+}

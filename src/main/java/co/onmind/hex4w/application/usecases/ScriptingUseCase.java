@@ -7,7 +7,7 @@ import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.application.ports.out.ScriptSourcePort;
 import co.onmind.hex4w.application.ports.out.ScriptingPort;
 import co.onmind.hex4w.application.ports.out.StorePort;
-import co.onmind.hex4w.domain.models.AllowedScript;
+import co.onmind.hex4w.domain.models.ScriptWhitelist;
 import co.onmind.hex4w.domain.models.StoreItem;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
 import org.springframework.stereotype.Component;
@@ -22,24 +22,29 @@ public class ScriptingUseCase implements ExecuteScriptTrait {
     private final ScriptingMapper scriptingMapper;
     private final StorePort storePort;
     private final AbcPort abcPort;
+    private final ScriptWhitelist scriptWhitelist;
 
     public ScriptingUseCase(
             ScriptSourcePort scriptSourcePort,
             ScriptingPort scriptingPort,
             ScriptingMapper scriptingMapper,
             StorePort storePort,
-            AbcPort abcPort) {
+            AbcPort abcPort,
+            ScriptWhitelist scriptWhitelist) {
         this.scriptSourcePort = scriptSourcePort;
         this.scriptingPort = scriptingPort;
         this.scriptingMapper = scriptingMapper;
         this.storePort = storePort;
         this.abcPort = abcPort;
+        this.scriptWhitelist = scriptWhitelist;
     }
 
     @Override
     public Mono<ScriptResultResponseDto> executeScript(String scriptFileName) {
-        return Mono.fromCallable(() -> AllowedScript.requireByFileName(scriptFileName))
-            .map(AllowedScript::fileName)
+        return Mono.fromCallable(() -> {
+                    scriptWhitelist.requireAllowed(scriptFileName);
+                    return scriptFileName;
+                })
             .flatMap(scriptSourcePort::loadScript)
             .flatMap(scriptingPort::executeScript)
             .map(scriptingMapper::toResponseDto);

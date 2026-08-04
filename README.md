@@ -31,14 +31,14 @@ App starts at `http://localhost:8080`. Health check: `GET /actuator/health`.
 | `GET` | `/api/v1/roles` | List all roles |
 | `GET` | `/api/v1/roles/{id}` | Get role by ID |
 | `GET` | `/api/v1/roles/search?name={pattern}` | Search roles |
-| `POST` | `/api/v1/scripts/execute` | Execute whitelisted `.js` file (GraalJS) |
+| `POST` | `/api/v1/script/execute` | Execute whitelisted `.js` file (GraalJS) |
 | `GET` | `/api/v1/xdb/sheet` | List XDB sheets (AbcWebClient) |
 | `GET` | `/api/v1/store/items?bucket={name}` | List S3 bucket objects |
 
 ### Script Execution Example
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/scripts/execute \
+curl -X POST http://localhost:8080/api/v1/script/execute \
   -H "Content-Type: application/json" \
   -d '{"script": "hello.js"}'
 ```

@@ -37,8 +37,11 @@ public interface ScriptServicesPort {
 
     // -- Lambda ---------------------------------------------------------------------------
 
-    /** Invoke an AWS Lambda function synchronously. */
+    /** Invoke an AWS Lambda function synchronously (waits for response). */
     String invoke(String functionName, String payload);
+
+    /** Invoke an AWS Lambda function fire-and-forget (InvocationType.EVENT). */
+    void invokeAsync(String functionName, String payload);
 
     // -- Storage (S3) ---------------------------------------------------------------------
 

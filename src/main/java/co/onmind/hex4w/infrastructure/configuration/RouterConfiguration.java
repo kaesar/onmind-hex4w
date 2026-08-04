@@ -86,7 +86,7 @@ public class RouterConfiguration {
     @Bean
     public RouterFunction<ServerResponse> scriptingRoutes(ScriptingHandler scriptingHandler) {
         return RouterFunctions
-            .route(POST("/api/v1/scripts/execute")
+            .route(POST("/api/v1/script/execute")
                 .and(accept(MediaType.APPLICATION_JSON))
                 .and(contentType(MediaType.APPLICATION_JSON)),
                 scriptingHandler::executeScript);

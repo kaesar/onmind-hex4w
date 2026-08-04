@@ -89,8 +89,10 @@ app:
     queue:
       script-commands: hex4w.script.commands
   scripts:
-    # Directory with .js files (must also be listed in AllowedScript enum)
+    # Directory with .js files (must also be listed in the whitelist below)
     location: classpath:scripts/
+    # Comma-separated whitelist of executable script filenames
+    whitelist: hello.js,example.js,services.js
   xdb:
     # XDB ABC API base URL
     base-url: http://localhost:9990
