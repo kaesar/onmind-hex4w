@@ -4,7 +4,7 @@ import co.onmind.hex4w.application.dto.in.KafkaScriptCommand;
 import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import co.onmind.hex4w.application.ports.in.ExecuteScriptTrait;
 import co.onmind.hex4w.application.ports.out.EventPublisherPort;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -21,13 +21,13 @@ public class RabbitMQEventConsumerAdapter {
 
     private final ExecuteScriptTrait executeScriptTrait;
     private final EventPublisherPort eventPublisher;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private final String resultsExchange;
 
     public RabbitMQEventConsumerAdapter(
             ExecuteScriptTrait executeScriptTrait,
             EventPublisherPort eventPublisher,
-            ObjectMapper objectMapper,
+            JsonMapper objectMapper,
             @Value("${app.rabbitmq.exchange.results:hex4w.script.results}") String resultsExchange) {
         this.executeScriptTrait = executeScriptTrait;
         this.eventPublisher = eventPublisher;

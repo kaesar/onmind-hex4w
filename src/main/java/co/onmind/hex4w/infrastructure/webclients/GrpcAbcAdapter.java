@@ -5,7 +5,7 @@ import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
 import co.onmind.hex4w.transverse.resilience.CircuitBreakerGeneric;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
@@ -28,10 +28,10 @@ public class GrpcAbcAdapter implements AbcPort {
 
     private final AbcServiceGrpc.AbcServiceStub stub;
     private final CircuitBreaker circuitBreaker;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
 
     public GrpcAbcAdapter(AbcServiceGrpc.AbcServiceStub stub,
-                          CircuitBreaker abcCircuitBreaker, ObjectMapper objectMapper) {
+                          CircuitBreaker abcCircuitBreaker, JsonMapper objectMapper) {
         this.stub = stub;
         this.circuitBreaker = abcCircuitBreaker;
         this.objectMapper = objectMapper;

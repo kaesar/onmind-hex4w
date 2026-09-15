@@ -121,7 +121,7 @@ public class RouterConfiguration {
     @Bean
     public RouterFunction<ServerResponse> utilityRoutes() {
         return RouterFunctions
-            .route(GET("/api/v1/health"), 
+            .route(GET("/api/health"), 
                 request -> ServerResponse.ok()
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(new HealthResponse("UP", "Role API is running")))

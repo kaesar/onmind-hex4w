@@ -4,7 +4,7 @@ import co.onmind.hex4w.application.dto.in.KafkaScriptCommand;
 import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import co.onmind.hex4w.application.ports.in.ExecuteScriptTrait;
 import co.onmind.hex4w.application.ports.out.EventPublisherPort;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +20,7 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 
 import java.time.Duration;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import tools.jackson.core.JacksonException;
 
 /**
  * Inbound adapter: polls AWS SQS queues for messages, processes them,
@@ -36,7 +36,7 @@ public class SqsEventConsumerAdapter {
     private final SqsAsyncClient sqsClient;
     private final ExecuteScriptTrait executeScriptTrait;
     private final EventPublisherPort eventPublisher;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private final String queueUrl;
     private final String resultsQueueUrl;
 
@@ -44,7 +44,7 @@ public class SqsEventConsumerAdapter {
             SqsAsyncClient sqsClient,
             ExecuteScriptTrait executeScriptTrait,
             EventPublisherPort eventPublisher,
-            ObjectMapper objectMapper,
+            JsonMapper objectMapper,
             @Value("${app.sqs.queue-url:}") String queueUrl,
             @Value("${app.sqs.topic.script-results:hex4w.script.results}") String resultsQueueUrl) {
         this.sqsClient = sqsClient;

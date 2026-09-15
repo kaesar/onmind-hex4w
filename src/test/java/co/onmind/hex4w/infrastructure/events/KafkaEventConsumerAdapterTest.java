@@ -4,7 +4,7 @@ import co.onmind.hex4w.application.dto.in.KafkaScriptCommand;
 import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import co.onmind.hex4w.application.ports.in.ExecuteScriptTrait;
 import co.onmind.hex4w.application.ports.out.EventPublisherPort;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,7 +27,7 @@ class KafkaEventConsumerAdapterTest {
     @Mock
     EventPublisherPort eventPublisher;
     @Mock
-    ObjectMapper objectMapper;
+    JsonMapper objectMapper;
 
     private KafkaEventConsumerAdapter adapter;
 

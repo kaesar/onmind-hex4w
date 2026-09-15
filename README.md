@@ -21,7 +21,7 @@ cd hex4w
 ./gradlew bootRun --spring.profiles.active=dev,kafka
 ```
 
-App starts at `http://localhost:8080`. Health check: `GET /actuator/health`.
+App starts at `http://localhost:8080`. Health checks: `GET /health` (Actuator) and `GET /api/health` (API).
 
 ## Key Endpoints
 

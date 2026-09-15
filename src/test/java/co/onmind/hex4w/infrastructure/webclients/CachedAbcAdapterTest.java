@@ -4,7 +4,7 @@ import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.application.ports.out.CachePort;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,7 +34,7 @@ class CachedAbcAdapterTest {
     @Mock
     private CachePort cachePort;
 
-    private ObjectMapper objectMapper;
+    private JsonMapper objectMapper;
     private CachedAbcAdapter cachedAbcAdapter;
 
     private static final AbcResponse SAMPLE_RESPONSE = new AbcResponse(
@@ -43,7 +43,7 @@ class CachedAbcAdapterTest {
 
     @BeforeEach
     void setUp() {
-        objectMapper = new ObjectMapper();
+        objectMapper = new JsonMapper();
         cachedAbcAdapter = new CachedAbcAdapter(delegate, cachePort,
                 objectMapper, Duration.ofSeconds(300));
     }

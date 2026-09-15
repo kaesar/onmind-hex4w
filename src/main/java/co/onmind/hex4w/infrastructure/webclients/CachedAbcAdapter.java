@@ -4,8 +4,8 @@ import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.application.ports.out.CachePort;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -28,11 +28,11 @@ public class CachedAbcAdapter implements AbcPort {
 
     private final AbcPort delegate;
     private final CachePort cachePort;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private final Duration ttl;
 
     public CachedAbcAdapter(AbcPort delegate, CachePort cachePort,
-                            ObjectMapper objectMapper, Duration ttl) {
+                            JsonMapper objectMapper, Duration ttl) {
         this.delegate = delegate;
         this.cachePort = cachePort;
         this.objectMapper = objectMapper;
@@ -52,7 +52,7 @@ public class CachedAbcAdapter implements AbcPort {
                         AbcResponse cachedResponse = objectMapper.readValue(cached, AbcResponse.class);
                         logger.debug("Cache HIT key={}", key);
                         return Mono.just(cachedResponse);
-                    } catch (JsonProcessingException e) {
+                    } catch (JacksonException e) {
                         logger.warn("Cache value for key={} could not be deserialized, ignoring", key);
                         return Mono.<AbcResponse> empty();
                     }
@@ -88,7 +88,7 @@ public class CachedAbcAdapter implements AbcPort {
     private String serialize(AbcResponse response, String key) {
         try {
             return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             logger.warn("Unable to serialize AbcResponse for cache at key={}", key, e);
             return null;
         }

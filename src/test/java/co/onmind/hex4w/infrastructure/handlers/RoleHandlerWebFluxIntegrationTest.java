@@ -84,7 +84,7 @@ class RoleHandlerWebFluxIntegrationTest {
                 .and(accept(MediaType.APPLICATION_JSON)), 
                 roleHandler::getRoleById)
             // Utility routes
-            .andRoute(GET("/api/v1/health"), 
+            .andRoute(GET("/api/health"), 
                 request -> ServerResponse.ok()
                     .contentType(MediaType.APPLICATION_JSON)
                     .bodyValue(new HealthResponse("UP", "Role API is running")))
@@ -482,7 +482,7 @@ class RoleHandlerWebFluxIntegrationTest {
         void shouldHandleHealthEndpointSuccessfully() {
             // When & Then
             webTestClient.get()
-                .uri("/api/v1/health")
+                .uri("/api/health")
                 .accept(MediaType.APPLICATION_JSON)
                 .exchange()
                 .expectStatus().isOk()

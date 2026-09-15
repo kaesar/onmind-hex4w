@@ -30,7 +30,7 @@ import co.onmind.hex4w.application.ports.out.CachePort;
 import co.onmind.hex4w.infrastructure.webclients.CachedAbcAdapter;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcToken;
 import co.onmind.hex4w.transverse.WebClientGeneric;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Configuration class for WebClient and external service communication.
@@ -263,7 +263,7 @@ public class WebClientConfiguration {
     public AbcPort abcPort(
             co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter,
             CachePort cachePort,
-            ObjectMapper objectMapper,
+            JsonMapper objectMapper,
             @Value("${app.xdb.cache.ttl-seconds:300}") int ttlSeconds) {
         return new CachedAbcAdapter(abcAdapter, cachePort, objectMapper,
                 Duration.ofSeconds(ttlSeconds));

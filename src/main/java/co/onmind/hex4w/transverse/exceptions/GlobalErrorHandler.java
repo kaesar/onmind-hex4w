@@ -3,11 +3,11 @@ package co.onmind.hex4w.transverse.exceptions;
 import co.onmind.hex4w.domain.exceptions.DuplicateRoleException;
 import co.onmind.hex4w.domain.exceptions.RoleNotFoundException;
 import co.onmind.hex4w.domain.exceptions.ScriptNotAllowedException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
+import org.springframework.boot.webflux.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
@@ -45,14 +45,14 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
     
     private static final Logger logger = LoggerFactory.getLogger(GlobalErrorHandler.class);
     
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     
     /**
      * Constructs a new GlobalErrorHandler with the required dependencies.
      * 
      * @param objectMapper the JSON object mapper for serializing error responses
      */
-    public GlobalErrorHandler(ObjectMapper objectMapper) {
+    public GlobalErrorHandler(JsonMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
     
@@ -69,7 +69,7 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
      *   <li>DuplicateRoleException → 409 CONFLICT</li>
      *   <li>RoleNotFoundException → 404 NOT_FOUND</li>
      *   <li>IllegalArgumentException → 400 BAD_REQUEST</li>
-     *   <li>JsonProcessingException → 400 BAD_REQUEST</li>
+     *   <li>JacksonException → 400 BAD_REQUEST</li>
      *   <li>All other exceptions → 500 INTERNAL_SERVER_ERROR</li>
      * </ul>
      * 
@@ -132,7 +132,7 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
                 "INVALID_REQUEST",
                 illegalArgEx.getMessage()
             );
-            case JsonProcessingException jsonEx -> new ErrorDetails(
+            case JacksonException jsonEx -> new ErrorDetails(
                 HttpStatus.BAD_REQUEST,
                 "INVALID_JSON",
                 "Invalid JSON format in request body"
@@ -157,7 +157,7 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
             byte[] responseBytes = objectMapper.writeValueAsBytes(errorResponse);
             DataBuffer buffer = response.bufferFactory().wrap(responseBytes);
             return response.writeWith(Mono.just(buffer));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             logger.error("Failed to serialize error response", e);
             // Fallback to simple error message
             String fallbackMessage = "{\"code\":\"SERIALIZATION_ERROR\",\"message\":\"Failed to serialize error response\"}";

@@ -4,7 +4,7 @@ import co.onmind.hex4w.application.dto.in.KafkaScriptCommand;
 import co.onmind.hex4w.application.dto.out.ScriptResultResponseDto;
 import co.onmind.hex4w.application.ports.in.ExecuteScriptTrait;
 import co.onmind.hex4w.application.ports.out.EventPublisherPort;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,13 +25,13 @@ public class KafkaEventConsumerAdapter {
 
     private final ExecuteScriptTrait executeScriptTrait;
     private final EventPublisherPort eventPublisher;
-    private final ObjectMapper objectMapper;
+    private final JsonMapper objectMapper;
     private final String resultsTopic;
 
     public KafkaEventConsumerAdapter(
             ExecuteScriptTrait executeScriptTrait,
             EventPublisherPort eventPublisher,
-            ObjectMapper objectMapper,
+            JsonMapper objectMapper,
             @Value("${app.kafka.topic.script-results:hex4w.script.results}") String resultsTopic) {
         this.executeScriptTrait = executeScriptTrait;
         this.eventPublisher = eventPublisher;

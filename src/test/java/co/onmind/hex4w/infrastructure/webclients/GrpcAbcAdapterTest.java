@@ -4,8 +4,8 @@ import co.onmind.grpc.proto.AbcServiceGrpc;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,12 +17,12 @@ class GrpcAbcAdapterTest {
 
     private AbcServiceGrpc.AbcServiceStub stub;
     private CircuitBreaker circuitBreaker;
-    private ObjectMapper objectMapper;
+    private JsonMapper objectMapper;
 
     static class TestableGrpcAbcAdapter extends GrpcAbcAdapter {
         private final reactor.core.publisher.Mono<co.onmind.grpc.proto.AbcResponse> grpcResponse;
 
-        TestableGrpcAbcAdapter(AbcServiceGrpc.AbcServiceStub stub, CircuitBreaker cb, ObjectMapper om,
+        TestableGrpcAbcAdapter(AbcServiceGrpc.AbcServiceStub stub, CircuitBreaker cb, JsonMapper om,
                                reactor.core.publisher.Mono<co.onmind.grpc.proto.AbcResponse> grpcResponse) {
             super(stub, cb, om);
             this.grpcResponse = grpcResponse;
@@ -38,7 +38,7 @@ class GrpcAbcAdapterTest {
     void setUp() {
         stub = mock(AbcServiceGrpc.AbcServiceStub.class);
         circuitBreaker = CircuitBreaker.ofDefaults("grpc-abc");
-        objectMapper = new ObjectMapper();
+        objectMapper = new JsonMapper();
     }
 
     @Test

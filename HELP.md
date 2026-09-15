@@ -224,7 +224,7 @@ La aplicación se iniciará en el puerto 8080.
 
 3. **Verificar que la aplicación esté funcionando**:
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8080/health
 ```
 
 ### Ejecutar Tests
@@ -1215,9 +1215,10 @@ automáticamente (`assumeTrue`) si Mailpit no está disponible.
 
 La aplicación incluye endpoints de monitoreo:
 
-- `/actuator/health` - Estado de salud de la aplicación
-- `/actuator/info` - Información de la aplicación
-- `/actuator/metrics` - Métricas de la aplicación
+- `/health` - Estado de salud de la aplicación (Actuator, base-path `/`)
+- `/info` - Información de la aplicación
+- `/metrics` - Métricas de la aplicación
+- `/api/health` - Health check custom de la API (sin versión)
 
 ### Logging Reactivo
 
