@@ -14,13 +14,14 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
 - **Logging Reactivo**: Aspectos de logging adaptados para programación reactiva
 - **GraphQL BFF**: Endpoint GraphQL como Backend For Frontend sobre XDB (/abc)
 - **gRPC Client**: Adaptador cliente gRPC para consumir XDB vía protobuf (perfil `grpc`, puerto 9991)
-- **Circuit Breaker**: resilience4j en adaptadores de infraestructura (AbcAdapter, LambdaAdapter, S3StoreAdapter; excluye SmtpEmailAdapter)
+- **Resilience**: resilience4j en adaptadores de infraestructura — Circuit Breaker + Bulkhead + Rate Limiter compuestos en un `OutboundGuard` (AbcAdapter, LambdaAdapter, S3StoreAdapter, salvo SmtpEmailAdapter)
+- **Consumidores de eventos**: Kafka, RabbitMQ y SQS con semántica de entrega explícita (el offset/ack avanza solo cuando el trabajo terminó)
 - **Scripts con acceso a infraestructura**: GraalVM JS scripts pueden usar servicios XDB, Lambda, S3, Eventos, Email, Cache vía facade
 
 ## Requisitos Previos
 
-- **Java 21** o superior
-- **Gradle 8.7** o superior
+- **Java 25** (`sdk use java 25.0.2-graalce`) — obligatorio, no solo recomendado
+- **Gradle 9+** (el wrapper fija 9.7.1)
 - **Git** para clonar el repositorio
 
 ## Arquitectura Hexagonal Reactiva
@@ -61,7 +62,8 @@ Una implementación completa de arquitectura hexagonal (patrón Ports and Adapte
   |       `-- CachedAbcAdapter    # Decorator: cachea responses de /abc via Redis
   `-- transverse/               # Componentes Transversales
       |-- exceptions/           # Manejo global de errores reactivo (GlobalErrorHandler)
-      `-- logging/              # Aspectos de logging reactivos
+      |-- logging/              # Aspectos de logging reactivos
+      `-- resilience/           # OutboundGuard (CB + Bulkhead + RateLimiter) reactivo
 ```
 
 ### Diagrama de Arquitectura
@@ -178,7 +180,12 @@ Mapeo de excepciones a HTTP status:
 | `ScriptNotAllowedException` | 403 FORBIDDEN | `SCRIPT_NOT_ALLOWED` |
 | `IllegalArgumentException` | 400 BAD_REQUEST | `INVALID_REQUEST` |
 | `JsonProcessingException` | 400 BAD_REQUEST | `INVALID_JSON` |
+| `BulkheadFullException` / `RequestNotPermitted` | 503 SERVICE_UNAVAILABLE | `SERVICE_OVERLOADED` |
 | Cualquier otra | 500 INTERNAL_SERVER_ERROR | `INTERNAL_ERROR` |
+
+Los rejections del bulkhead y del rate limiter son **decisiones de descarte de carga**, no
+fallos del downstream: se responden 503 para que el cliente pueda reintentar con backoff, en
+lugar de un 500 que lo presentaría como un error del servidor.
 
 #### b. `handleError` por Handler (frontera)
 Cada handler en `infrastructure/handlers/` (p. ej. `RoleHandler`,
@@ -190,7 +197,7 @@ flujo reactivo del handler**, antes de que llegue al `GlobalErrorHandler`.
 #### ¿Por qué existen ambas y cuál predomina?
 - En la **aplicación en ejecución**, la excepción se resuelve en el primer
   `onErrorResume` que la intercepte. Si el handler la maneja, se usa el formato
-  de 3 campos; si no, la excepción sube y el `GlobalErrorHandler` la formatea
+  de 3 campos, si no, la excepción sube y el `GlobalErrorHandler` la formatea
   con 5 campos.
 - En los **tests aislados de handler** (`*WebFluxIntegrationTest`), el
   `WebTestClient` se construye manualmente solo con el handler y el
@@ -499,6 +506,27 @@ spring:
     base-path: /api/v1
 ```
 
+### Pool de conexiones de Reactor Netty
+
+```yaml
+app:
+  webclient:
+    connect-timeout: 5000
+    read-timeout: 10000
+    write-timeout: 10000
+    max-memory-size: 1048576
+    max-connections: 100
+    pending-acquire-max-count: 100
+    pending-acquire-timeout: 2000
+```
+
+Los defaults de Reactor Netty son `maxConnections = max(availableProcessors, 8) * 2` y
+`pendingAcquireMaxCount = 256` con un `pendingAcquireTimeout` de **45 s**. Ese último es el
+problema: el exceso de peticiones se **encola** hasta 45 segundos en lugar de rechazarse, así que
+una ráfaga contra un downstream lento se convierte en una pila de latencia en lugar de un fallo
+rápido. Estos valores hacen que el exceso falle rápido. El bulkhead del `OutboundGuard` rechaza
+antes, lo que queda es la última línea de defensa.
+
 ### Configuración XDB (AbcWebClient)
 
 ```yaml
@@ -567,6 +595,19 @@ Error:
 - Perfil `kafka` lo rehabilita y activa `ScriptKafkaConsumer`.
 - Dependencia: `org.springframework.kafka:spring-kafka`.
 
+#### Semántica de entrega
+
+El listener **espera a que el trabajo termine antes de retornar** (`.block()` sobre la cadena
+reactiva), de modo que el offset solo avanza cuando el resultado ya fue publicado. Suscribir y
+retornar dejaba el offset avanzando mientras el script seguía en marcha: una caída a mitad de
+camino perdía el comando, y un fallo al publicar el resultado se perdía sin nada que reintentar.
+
+| Situación | Resultado |
+|---|---|
+| Script falla | se publica el resultado de error y el offset avanza |
+| Falla la publicación del resultado | la excepción **propaga** → el contenedor reintenta |
+| Payload corrupto | la excepción **propaga** → el error handler del contenedor reintenta unas veces y luego descarta el registro |
+
 ### AWS SQS (opcional, perfil `sqs`)
 
 Adaptadores reactivos para colas SQS usando `SqsAsyncClient` del AWS SDK v2.
@@ -585,10 +626,39 @@ app:
     queue-url: https://sqs.us-east-1.amazonaws.com/123/my-queue
     topic:
       script-results: https://sqs.us-east-1.amazonaws.com/123/results
+    poll-interval-ms: 1000
+    visibility-timeout-seconds: 120
 ```
 
-- `SqsEventSenderAdapter` — publica eventos a SQS implementando `EventPublisherPort`. El `topic` se mapea a `queueUrl`; el `key` como atributo de mensaje.
-- `SqsEventConsumerAdapter` — consume mensajes SQS: poll → deserializa `KafkaScriptCommand` → ejecuta script vía `ExecuteScriptTrait` → publica resultado vía `EventPublisherPort` → borra mensaje de la cola. En fallo de deserialización: borra el mensaje (poison cleanup). En fallo de ejecución: no borra (permite reprocessing).
+- `SqsEventSenderAdapter` — publica eventos a SQS implementando `EventPublisherPort`. El `topic` se mapea a `queueUrl`, el `key` a atributo de mensaje.
+- `SqsEventConsumerAdapter` — consume mensajes SQS: poll → deserializa `KafkaScriptCommand` → ejecuta script vía `ExecuteScriptTrait` → publica resultado vía `EventPublisherPort` → borra mensaje de la cola.
+- `SqsMessagePoller` — **cablea el bucle de polling**, que antes no lo invocaba nadie (el consumidor era código muerto). Es una cadena Reactor pura: no bloquea ningún hilo, el long-poll de 20 s lo resuelve el cliente async del SDK, y la suscripción se **reanuda** tras cada lote en lugar de re-suscribirse en un timer (que produciría una ráfaga cuando un poll tarda más que el intervalo). El ciclo se inicia en `@PostConstruct` y se detiene en `@PreDestroy`.
+
+#### Semántica de entrega
+
+| Situación | Resultado | ¿Se borra el mensaje? |
+|---|---|---|
+| Script falla | se publica el resultado de error | **Sí** → se consume |
+| Falla la publicación del resultado | propaga | **No** → se reintenta |
+| Payload corrupto (poison) | se registra | **Sí** → se consume |
+
+Que un script fallido **consuma** el mensaje es deliberado: dejarlo en la cola lo haría reaparecer
+tras el `visibilityTimeout` y volvería a ejecutar el script indefinidamente. Si se requieren
+reintentos automáticos, la vía correcta es una **redrive policy (DLQ)** de SQS.
+
+#### `visibilityTimeout` y duración del script
+
+`app.sqs.visibility-timeout-seconds` (120) **debe ser mayor** que el tiempo máximo que un script
+puede tardar. Si no, el mensaje reaparece mientras todavía se está procesando y el script se
+ejecuta dos veces en paralelo.
+
+```yaml
+app:
+  scripts:
+    statement-limit: 5000000   #statements máximos antes de que GraalVM cancele el script
+  sqs:
+    visibility-timeout-seconds: 120
+```
 
 ### RabbitMQ (opcional, perfil `rabbitmq`)
 
@@ -617,8 +687,19 @@ app:
       script-commands: hex4w.script.commands
 ```
 
-- `RabbitMQEventPublisherAdapter` — publica eventos implementando `EventPublisherPort`. El `topic` se mapea a `exchange`; el `key` a `routingKey`.
+- `RabbitMQEventPublisherAdapter` — publica eventos implementando `EventPublisherPort`. El `topic` se mapea a `exchange`, el `key` a `routingKey`.
 - `RabbitMQEventConsumerAdapter` — consume mensajes via `@RabbitListener`, deserializa `KafkaScriptCommand`, ejecuta script vía `ExecuteScriptTrait`, publica resultado vía `EventPublisherPort`.
+
+#### Semántica de entrega
+
+Igual que en Kafka, el listener **espera a que el trabajo termine antes de retornar**, así que el
+ack solo ocurre cuando el resultado ya fue publicado.
+
+| Situación | Resultado |
+|---|---|
+| Script falla | se publica el resultado de error y el mensaje se ack |
+| Falla la publicación del resultado | la excepción **propaga** → el contenedor reencola |
+| Payload corrupto | se **descarta con log**. A diferencia de Kafka, aquí no se propaga: el contenedor de RabbitMQ reencola por defecto un mensaje rechazado, y un payload corrupto reencolado para siempre sería un bucle infinito |
 
 ### AWS SNS (opcional, perfil `sns`)
 
@@ -708,7 +789,7 @@ XDB abre el listener gRPC en el puerto 9991 (configurado en `api/xdb`).
      llama gRPC `Execute`.
 3. El bean `AbcPort @Primary` en `GrpcConfiguration` envuelve `GrpcAbcAdapter`
    con `CachedAbcAdapter` (cache de lecturas, igual que con el adaptador HTTP).
-4. Circuit Breaker: `grpc-abc` (comparte configuración con `abc`, `lambda`, `s3`).
+4. OutboundGuard: `abcGuard` (el mismo guard que usa el adaptador HTTP de XDB).
 
 #### Mapeo de campos
 
@@ -1088,44 +1169,95 @@ public class UserRouterConfiguration {
 5. **Backpressure**: Considerar estrategias de backpressure para streams grandes
 6. **Schedulers**: Usar schedulers apropiados para operaciones CPU-intensivas
 
-## Resilience (Circuit Breaker)
+## Resilience (Circuit Breaker + Bulkhead + Rate Limiter)
 
-Adaptadores de infraestructura que llaman servicios externos están protegidos con
-**Circuit Breaker** vía Resilience4j. El bean `CircuitBreakerGeneric` en
-`transverse/resilience/` envuelve `Mono`/`Flux` con `CircuitBreakerOperator`.
+Los adaptadores de infraestructura que llaman a servicios externos están protegidos con
+**tres políticas de resilience4j** compuestas en un `OutboundGuard`
+(`transverse/resilience/OutboundGuard.java`), que envuelve el `Mono`/`Flux` con los operadores
+de Reactor.
 
-### Dependencia
+### Dependencias
 
 ```gradle
 implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
 implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+implementation 'io.github.resilience4j:resilience4j-bulkhead:2.2.0'
+implementation 'io.github.resilience4j:resilience4j-ratelimiter:2.2.0'
 ```
 
-### Configuración de Circuit Breakers
+### Orden de composición (importante)
 
-Los beans se definen en `WebClientConfiguration` con la misma configuración base:
+```
+RateLimiter  →  Bulkhead  →  CircuitBreaker  →  llamada
+```
+
+- **Rate limiter** (el más externo) — rechaza el exceso de llamadas antes de que ocupe una ranura
+  de concurrencia y antes de tocar el downstream.
+- **Bulkhead** — acota cuántas llamadas están **en vuelo** a la vez. El pool de conexiones de
+  Reactor Netty no puede ofrecer esto: encola el exceso (256 pending acquires, 45 s) en lugar de
+  rechazarlo, de modo que una ráfaga se convierte en una pila de latencia en vez de un fallo rápido.
+- **Circuit breaker** (el más interno) — solo observa fallos reales del downstream. Un rejection
+  del bulkhead o del rate limiter **no** es un fallo del downstream y nunca abre el breaker.
+
+> `transformDeferred` **envuelve** el publisher, así que el operador aplicado *último* queda
+> fuera. La cadena se escribe por eso en orden inverso de suscripción: el circuit breaker se
+> aplica primero (el más interno) y el rate limiter el último (el más externo).
+
+### Beans
+
+Los beans se definen en `ResilienceConfiguration` (no en `WebClientConfiguration`):
 
 | Bean | Servicio protegido |
 |---|---|
-| `abcCircuitBreaker` | XDB `/abc` (HTTP) |
-| `lambdaCircuitBreaker` | AWS Lambda invocation |
-| `s3CircuitBreaker` | AWS S3 operations |
+| `abcGuard` | XDB `/abc` (HTTP y gRPC) |
+| `lambdaGuard` | AWS Lambda invocation |
+| `s3Guard` | AWS S3 operations |
 
-Config: failure-rate 50%, window 10, min 5 calls, 30s open, 3 half-open calls.
+Config del circuit breaker: failure-rate 50%, window 10, min 5 calls, 30s open, 3 half-open calls.
 
-### Adaptadores con Circuit Breaker
+### Configuración
+
+```yaml
+app:
+  resilience:
+    abc:
+      max-concurrent-calls: 20
+      rate-limit-per-period: 50
+    s3:
+      max-concurrent-calls: 10
+      rate-limit-per-period: 20
+    lambda:
+      max-concurrent-calls: 10
+      rate-limit-per-period: 20
+```
+
+El bloque es **opcional**: los defaults de `ResilienceProperties` ya son razonables. Tanto el
+bulkhead como el rate limiter **rechazan de inmediato** por defecto (`max-wait-ms` y
+`rate-limit-timeout-ms` en 0). Subirlos convierte el rechazo en una espera.
+
+> El `timeoutDuration` por defecto del rate limiter de resilience4j es **5 s**, no 0. Con ese
+> valor el operador *retrasa* la suscripción en vez de rechazar, así que el efecto real sería
+> "suavizar el pico" y no "descartar carga".
+
+### Adaptadores con OutboundGuard
 
 | Adaptador | Bean inyectado |
 |---|---|
-| `AbcAdapter` | `abcCircuitBreaker` |
-| `LambdaAdapter` | `lambdaCircuitBreaker` |
-| `S3StoreAdapter` | `s3CircuitBreaker` |
+| `AbcAdapter` | `abcGuard` |
+| `GrpcAbcAdapter` | `abcGuard` |
+| `LambdaAdapter` | `lambdaGuard` |
+| `S3StoreAdapter` | `s3Guard` |
 
-### Adaptadores SIN Circuit Breaker
+### Adaptadores SIN OutboundGuard
 
 | Adaptador | Razón |
 |---|---|
-| `SmtpEmailAdapter` | Email es best-effort; SMTP lento pero funcional no debe bloquear entrega. Retry es preferible a fast-fail. |
+| `SmtpEmailAdapter` | Email es best-effort. Un SMTP lento pero funcional no debe bloquear la entrega. Retry es preferible a fast-fail. |
+
+### Respuesta HTTP ante un rechazo
+
+Un rejection del bulkhead o del rate limiter se traduce a **503 Service Unavailable**
+(`SERVICE_OVERLOADED`) en `GlobalErrorHandler`, no a un 500.
 
 ## Notificaciones (Email)
 
@@ -1329,9 +1461,16 @@ como el objeto global `services` dentro del contexto de ejecución.
 | `allowIO` | `false` (sin acceso a archivos del host) |
 | `allowCreateThread` | `false` |
 | `allowNativeAccess` | `false` |
+| Límite de trabajo | `app.scripts.statement-limit` (5 000 000) — `ResourceLimits.statementLimit` de GraalVM: al superarlo, el contexto se **cierra** y el script se cancela, lo que libera el worker en lugar de dejarlo girando para siempre |
 
 Los scripts **solo pueden** usar los métodos públicos del facade. No pueden
 acceder a `java.lang.Runtime`, leer archivos, abrir sockets, etc.
+
+> **Sobre el límite de tiempo:** GraalVM Community **no tiene *CPU-time boxing***
+> (`sandbox.MaxCPUTime` es una función de Enterprise), así que el conteo de statements es la
+> única cota disponible. No es un límite de wall-clock: un script bloqueado en I/O a través del
+> facade `services.*` no lo cuenta. Para el caso de SQS, `app.sqs.visibility-timeout-seconds`
+> debe ser holgadamente mayor que el tiempo máximo que un script pueda tardar.
 
 ### API `services.*`
 

@@ -32,35 +32,47 @@ public class KafkaEventConsumerAdapter {
             ExecuteScriptTrait executeScriptTrait,
             EventPublisherPort eventPublisher,
             JsonMapper objectMapper,
-            @Value("${app.kafka.topic.script-results:hex4w.script.results}") String resultsTopic) {
+            @Value("${app.kafka.topic.script-results:hex.script.results}") String resultsTopic) {
         this.executeScriptTrait = executeScriptTrait;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
         this.resultsTopic = resultsTopic;
     }
 
-    @KafkaListener(topics = "${app.kafka.topic.script-commands:hex4w.script.commands}")
+    @KafkaListener(topics = "${app.kafka.topic.script-commands:hex.script.commands}")
     public void onScriptCommand(String message) {
         logger.debug("Received Kafka command: {}", message);
 
+        KafkaScriptCommand command;
         try {
-            KafkaScriptCommand command = objectMapper.readValue(message, KafkaScriptCommand.class);
-
-            executeScriptTrait.executeScript(command.script())
-                .flatMap(result -> {
-                    publishResult(command.correlationId(), result, null);
-                    return Mono.just(true);
-                })
-                .onErrorResume(e -> {
-                    logger.error("Script execution failed: {}", e.getMessage());
-                    publishResult(command.correlationId(), null, e.getMessage());
-                    return Mono.just(true);
-                })
-                .subscribe(null, e -> logger.error("Failed to publish result: {}", e.getMessage()));
-
-        } catch (Exception e) {
+            command = objectMapper.readValue(message, KafkaScriptCommand.class);
+        } catch (RuntimeException e) {
+            // Rethrown so the container error handler applies: it retries a few times
+            // and then skips the record. Swallowing it here would drop the command
+            // silently, with the offset already advanced.
             logger.error("Failed to deserialize command: {}", e.getMessage());
+            throw e;
         }
+
+        // The listener MUST NOT return before the work is done. Subscribing and returning
+        // would let the container advance the offset while the script is still running:
+        // a crash in the middle would lose the command, and a failure to publish the
+        // result would be swallowed with nothing left to retry. Blocking the consumer
+        // thread is safe here — it is not a Reactor event loop.
+        executeScriptTrait.executeScript(command.script())
+            .flatMap(result -> {
+                publishResult(command.correlationId(), result, null);
+                return Mono.just(true);
+            })
+            .onErrorResume(e -> {
+                // A failing script is a business outcome: publish the error and let the
+                // offset advance. A failure to publish THAT result propagates instead,
+                // so the container retries the whole command.
+                logger.error("Script execution failed: {}", e.getMessage());
+                publishResult(command.correlationId(), null, e.getMessage());
+                return Mono.just(true);
+            })
+            .block();
     }
 
     private void publishResult(String correlationId, ScriptResultResponseDto result, String error) {
@@ -75,8 +87,8 @@ public class KafkaEventConsumerAdapter {
     }
 
     private record ScriptResultEnvelope(
-            String correlationId,
-            ScriptResultResponseDto result,
-            String error
+        String correlationId,
+        ScriptResultResponseDto result,
+        String error
     ) {}
 }

@@ -13,6 +13,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -52,9 +55,6 @@ class RabbitMQEventConsumerAdapterTest {
 
         adapter.onScriptCommand(message);
 
-        // Give async subscription time to complete
-        Thread.sleep(100);
-
         verify(eventPublisher).publish(
                 eq("hex4w.script.results"),
                 eq("corr-1"),
@@ -73,8 +73,6 @@ class RabbitMQEventConsumerAdapterTest {
 
         adapter.onScriptCommand(message);
 
-        Thread.sleep(100);
-
         verify(eventPublisher).publish(
                 eq("hex4w.script.results"),
                 eq("corr-2"),
@@ -87,8 +85,46 @@ class RabbitMQEventConsumerAdapterTest {
     void handlesDeserializationError() {
         String badMessage = "not valid json";
 
-        adapter.onScriptCommand(badMessage);
+        // The RabbitMQ container requeues a rejected message by default, so a malformed
+        // payload is dropped with a log instead of being requeued forever.
+        assertDoesNotThrow(() -> adapter.onScriptCommand(badMessage));
 
         verifyNoInteractions(executeScriptTrait, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("onScriptCommand waits for the result to be published before returning")
+    void waitsForTheResultBeforeReturning() throws Exception {
+        KafkaScriptCommand command = new KafkaScriptCommand("hello.js", "corr-3");
+        String message = objectMapper.writeValueAsString(command);
+
+        when(executeScriptTrait.executeScript("hello.js"))
+                .thenReturn(Mono.just(new ScriptResultResponseDto("Hello", "", null)));
+
+        AtomicBoolean published = new AtomicBoolean(false);
+        doAnswer(invocation -> {
+            published.set(true);
+            return null;
+        }).when(eventPublisher).publish(anyString(), anyString(), anyString());
+
+        adapter.onScriptCommand(message);
+
+        assertTrue(published.get(),
+                "the listener must not return before the result has been published, "
+                        + "otherwise the message is acked while the work is still running");
+    }
+
+    @Test
+    @DisplayName("onScriptCommand propagates a publication failure so the message is requeued")
+    void propagatesPublicationFailure() throws Exception {
+        KafkaScriptCommand command = new KafkaScriptCommand("hello.js", "corr-4");
+        String message = objectMapper.writeValueAsString(command);
+
+        when(executeScriptTrait.executeScript("hello.js"))
+                .thenReturn(Mono.just(new ScriptResultResponseDto("Hello", "", null)));
+        doThrow(new RuntimeException("broker down"))
+                .when(eventPublisher).publish(anyString(), anyString(), anyString());
+
+        assertThrows(RuntimeException.class, () -> adapter.onScriptCommand(message));
     }
 }

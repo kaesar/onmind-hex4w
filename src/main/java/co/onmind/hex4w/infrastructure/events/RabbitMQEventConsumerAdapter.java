@@ -39,24 +39,36 @@ public class RabbitMQEventConsumerAdapter {
     public void onScriptCommand(String message) {
         logger.debug("Received RabbitMQ command: {}", message);
 
+        KafkaScriptCommand command;
         try {
-            KafkaScriptCommand command = objectMapper.readValue(message, KafkaScriptCommand.class);
-
-            executeScriptTrait.executeScript(command.script())
-                .flatMap(result -> {
-                    publishResult(command.correlationId(), result, null);
-                    return Mono.just(true);
-                })
-                .onErrorResume(e -> {
-                    logger.error("Script execution failed: {}", e.getMessage());
-                    publishResult(command.correlationId(), null, e.getMessage());
-                    return Mono.just(true);
-                })
-                .subscribe(null, e -> logger.error("Failed to publish result: {}", e.getMessage()));
-
+            command = objectMapper.readValue(message, KafkaScriptCommand.class);
         } catch (Exception e) {
-            logger.error("Failed to deserialize command: {}", e.getMessage());
+            // Unlike Kafka, this is NOT rethrown: the RabbitMQ container requeues a
+            // rejected message by default, so a malformed payload would be redelivered
+            // forever. The command is dropped with a loud log instead.
+            logger.error("Failed to deserialize command, dropping it: {}", e.getMessage());
+            return;
         }
+
+        // The listener MUST NOT return before the work is done. Subscribing and returning
+        // would ack the message while the script is still running: a crash in the middle
+        // would lose the command, and a failure to publish the result would be swallowed
+        // with nothing left to retry. Blocking the consumer thread is safe here — it is
+        // not a Reactor event loop.
+        executeScriptTrait.executeScript(command.script())
+            .flatMap(result -> {
+                publishResult(command.correlationId(), result, null);
+                return Mono.just(true);
+            })
+            .onErrorResume(e -> {
+                // A failing script is a business outcome: publish the error and let the
+                // message be acked. A failure to publish THAT result propagates instead,
+                // so the container requeues and retries the command.
+                logger.error("Script execution failed: {}", e.getMessage());
+                publishResult(command.correlationId(), null, e.getMessage());
+                return Mono.just(true);
+            })
+            .block();
     }
 
     private void publishResult(String correlationId, ScriptResultResponseDto result, String error) {
@@ -71,8 +83,8 @@ public class RabbitMQEventConsumerAdapter {
     }
 
     private record ScriptResultEnvelope(
-            String correlationId,
-            ScriptResultResponseDto result,
-            String error
+        String correlationId,
+        ScriptResultResponseDto result,
+        String error
     ) {}
 }

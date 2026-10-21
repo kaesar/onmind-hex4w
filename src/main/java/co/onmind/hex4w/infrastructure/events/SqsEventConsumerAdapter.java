@@ -39,6 +39,7 @@ public class SqsEventConsumerAdapter {
     private final JsonMapper objectMapper;
     private final String queueUrl;
     private final String resultsQueueUrl;
+    private final int visibilityTimeout;
 
     public SqsEventConsumerAdapter(
             SqsAsyncClient sqsClient,
@@ -46,13 +47,16 @@ public class SqsEventConsumerAdapter {
             EventPublisherPort eventPublisher,
             JsonMapper objectMapper,
             @Value("${app.sqs.queue-url:}") String queueUrl,
-            @Value("${app.sqs.topic.script-results:hex4w.script.results}") String resultsQueueUrl) {
+            @Value("${app.sqs.topic.script-results:hex4w.script.results}") String resultsQueueUrl,
+            @Value("${app.sqs.visibility-timeout-seconds:120}") int visibilityTimeout) {
         this.sqsClient = sqsClient;
         this.executeScriptTrait = executeScriptTrait;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
         this.queueUrl = queueUrl;
         this.resultsQueueUrl = resultsQueueUrl;
+        this.visibilityTimeout = visibilityTimeout;
+        logger.info("SQS command consumer ready: visibility timeout {}s", visibilityTimeout);
     }
 
     public Flux<Message> pollMessages() {
@@ -60,7 +64,7 @@ public class SqsEventConsumerAdapter {
                 .queueUrl(queueUrl)
                 .maxNumberOfMessages(10)
                 .waitTimeSeconds(20)
-                .visibilityTimeout(30)
+                .visibilityTimeout(visibilityTimeout)
                 .build();
 
         return Mono.fromFuture(sqsClient.receiveMessage(request))
@@ -76,10 +80,19 @@ public class SqsEventConsumerAdapter {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(command -> processScript(command, message)
                         .onErrorResume(e -> {
+                            // A failing script is a business outcome, not a transport
+                            // failure: publish the error and consume the message.
+                            // Leaving it in the queue would make it reappear after the
+                            // visibility timeout and run the script again, forever.
+                            // If automatic retries are wanted, configure an SQS redrive
+                            // policy (DLQ).
+                            logger.error("Script execution failed: {}", e.getMessage());
                             publishError(command.correlationId(), e.getMessage());
-                            return Mono.empty();
+                            return deleteMessage(message).then(Mono.<ScriptResultResponseDto>empty());
                         }))
                 .onErrorResume(e -> {
+                    // A malformed payload is a poison message: consume it, otherwise it
+                    // comes back on every poll.
                     logger.error("Failed to deserialize SQS message: {}", e.getMessage());
                     return deleteMessage(message).then(Mono.<ScriptResultResponseDto>empty());
                 })

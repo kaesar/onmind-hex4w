@@ -17,7 +17,7 @@ class GraalJsAdapterTest {
     @BeforeEach
     void setUp() {
         ScriptServicesPort services = mock(ScriptServicesPort.class);
-        adapter = new GraalJsAdapter(services);
+        adapter = new GraalJsAdapter(services, 5_000_000);
     }
 
     @Test
@@ -53,6 +53,37 @@ class GraalJsAdapterTest {
     void returnsObjectToString() {
         StepVerifier.create(adapter.executeScript("JSON.stringify({a: 1})"))
             .assertNext(result -> assertEquals("{\"a\":1}", result.value()))
+            .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("cancels a runaway script instead of spinning forever")
+    void cancelsRunawayScript() {
+        ScriptServicesPort services = mock(ScriptServicesPort.class);
+        GraalJsAdapter limited = new GraalJsAdapter(services, 10_000);
+
+        long start = System.currentTimeMillis();
+        StepVerifier.create(limited.executeScript("while (true) { }"))
+            .assertNext(result -> {
+                assertNull(result.value());
+                assertNotNull(result.stderr());
+                assertTrue(result.stderr().contains("statement limit"), result.stderr());
+            })
+            .verifyComplete();
+
+        long elapsed = System.currentTimeMillis() - start;
+        assertTrue(elapsed < 30_000,
+                "the runaway script must be cancelled instead of blocking the worker, took " + elapsed + "ms");
+    }
+
+    @Test
+    @DisplayName("a statement limit of 0 disables the guard")
+    void statementLimitCanBeDisabled() {
+        ScriptServicesPort services = mock(ScriptServicesPort.class);
+        GraalJsAdapter unlimited = new GraalJsAdapter(services, 0);
+
+        StepVerifier.create(unlimited.executeScript("1 + 2"))
+            .assertNext(result -> assertEquals("3", result.value()))
             .verifyComplete();
     }
 }

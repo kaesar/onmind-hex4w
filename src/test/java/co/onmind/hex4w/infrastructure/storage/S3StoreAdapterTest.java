@@ -1,6 +1,6 @@
 package co.onmind.hex4w.infrastructure.storage;
 
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import co.onmind.hex4w.transverse.resilience.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,8 +26,7 @@ class S3StoreAdapterTest {
     @BeforeEach
     void setUp() {
         s3Client = mock(S3AsyncClient.class);
-        CircuitBreaker cb = CircuitBreaker.ofDefaults("s3");
-        adapter = new S3StoreAdapter(s3Client, cb);
+        adapter = new S3StoreAdapter(s3Client, TestGuards.permissive());
     }
 
     @Test

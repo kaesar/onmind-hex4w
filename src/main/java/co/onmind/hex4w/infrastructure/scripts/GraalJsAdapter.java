@@ -12,6 +12,8 @@ import reactor.core.scheduler.Schedulers;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.HostAccess;
+import org.graalvm.polyglot.PolyglotException;
+import org.graalvm.polyglot.ResourceLimits;
 import org.graalvm.polyglot.Value;
 
 @Component
@@ -21,11 +23,15 @@ public class GraalJsAdapter implements ScriptingPort {
 
     private final Engine engine;
     private final ScriptServicesPort scriptServices;
+    private final long statementLimit;
 
-    public GraalJsAdapter(ScriptServicesPort scriptServices) {
+    public GraalJsAdapter(ScriptServicesPort scriptServices,
+                          @org.springframework.beans.factory.annotation.Value("${app.scripts.statement-limit:5000000}") long statementLimit) {
         this.scriptServices = scriptServices;
+        this.statementLimit = statementLimit;
         this.engine = Engine.create("js");
-        logger.info("GraalVM JavaScript engine initialized for sandboxed execution");
+        logger.info("GraalVM JavaScript engine initialized for sandboxed execution "
+                + "(statement limit: {})", statementLimit > 0 ? statementLimit : "disabled");
     }
 
     @Override
@@ -36,7 +42,7 @@ public class GraalJsAdapter implements ScriptingPort {
     }
 
     private ScriptResult executeSandboxed(String script) {
-        try (Context context = Context.newBuilder("js")
+        Context.Builder builder = Context.newBuilder("js")
                 .engine(engine)
                 .allowHostAccess(HostAccess.ALL)
                 .allowNativeAccess(false)
@@ -46,8 +52,22 @@ public class GraalJsAdapter implements ScriptingPort {
                 .allowHostClassLookup(className -> false)
                 .option("js.ecmascript-version", "2023")
                 .allowExperimentalOptions(true)
-                .option("js.timezone", "UTC")
-                .build()) {
+                .option("js.timezone", "UTC");
+
+        if (statementLimit > 0) {
+            // Bounds the work a script can do. GraalVM Community has no CPU-time
+            // boxing (sandbox.MaxCPUTime is an Enterprise feature), so the statement
+            // count is the only available guard against a runaway script: when the
+            // limit is hit the context is closed and the script is cancelled, which
+            // releases the worker thread instead of leaving it spinning forever.
+            // It is not a wall-clock bound — a script blocked on I/O through the
+            // services facade is not counted by it.
+            builder.resourceLimits(ResourceLimits.newBuilder()
+                    .statementLimit(statementLimit, null)
+                    .build());
+        }
+
+        try (Context context = builder.build()) {
 
             context.initialize("js");
 
@@ -59,6 +79,14 @@ public class GraalJsAdapter implements ScriptingPort {
             Value result = context.eval("js", script);
             String value = result.isNull() ? null : result.toString();
             return new ScriptResult(value, "", null);
+        } catch (PolyglotException e) {
+            if (e.isResourceExhausted() || e.isCancelled()) {
+                logger.warn("Script execution exceeded the statement limit of {}", statementLimit);
+                return new ScriptResult(null, "",
+                        "Script exceeded the statement limit of " + statementLimit);
+            }
+            logger.warn("Script execution error: {}", e.getMessage());
+            return new ScriptResult(null, "", e.getMessage());
         } catch (Exception e) {
             logger.warn("Script execution error: {}", e.getMessage());
             return new ScriptResult(null, "", e.getMessage());

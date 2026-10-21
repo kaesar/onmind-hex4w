@@ -59,6 +59,23 @@ app:
     read-timeout: 10000
     write-timeout: 10000
     max-memory-size: 1048576
+    # Reactor Netty pool. The defaults queue the excess for up to 45s instead of
+    # rejecting it, so a burst turns into latency instead of a fast failure.
+    max-connections: 100
+    pending-acquire-max-count: 100
+    pending-acquire-timeout: 2000
+  # Limits per downstream: calls in flight and calls allowed per period.
+  # Optional, the defaults in ResilienceProperties are already sensible.
+  resilience:
+    abc:
+      max-concurrent-calls: 20
+      rate-limit-per-period: 50
+    s3:
+      max-concurrent-calls: 10
+      rate-limit-per-period: 20
+    lambda:
+      max-concurrent-calls: 10
+      rate-limit-per-period: 20
   notification:
     email:
       from: hex4w@localhost
@@ -75,6 +92,13 @@ app:
   lambda:
     region: us-east-1
     endpoint: http://localhost:4566  # LocalStack
+  sqs:
+    # Gap between the end of a batch and the start of the next poll.
+    # SQS long polling already waits up to 20s for a message.
+    poll-interval-ms: 1000
+    # How long SQS hides a received message. Must exceed the longest a script can
+    # take, otherwise the message reappears while still being processed.
+    visibility-timeout-seconds: 120
   rabbitmq:
     host: localhost
     port: 5672
@@ -88,6 +112,9 @@ app:
     location: classpath:scripts/
     # Comma-separated whitelist of executable script filenames
     whitelist: hello.js,example.js,services.js
+    # Statements a script may execute before GraalVM cancels it.
+    # Not a wall-clock bound. Set to 0 to disable.
+    statement-limit: 5000000
   xdb:
     # XDB ABC API base URL
     base-url: http://localhost:9990

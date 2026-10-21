@@ -1,7 +1,7 @@
 package co.onmind.hex4w.infrastructure.lambda;
 
 import co.onmind.hex4w.application.ports.out.LambdaPort;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import co.onmind.hex4w.transverse.resilience.TestGuards;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,12 +29,10 @@ class LambdaAdapterTest {
     private LambdaAsyncClient lambdaClient;
 
     private LambdaPort adapter;
-    private CircuitBreaker circuitBreaker;
 
     @BeforeEach
     void setUp() {
-        circuitBreaker = CircuitBreaker.ofDefaults("lambda");
-        adapter = new LambdaAdapter(lambdaClient, circuitBreaker);
+        adapter = new LambdaAdapter(lambdaClient, TestGuards.permissive());
     }
 
     @Test
@@ -163,7 +161,7 @@ class LambdaAdapterTest {
     @Test
     @DisplayName("invokeAsync uses circuitBreaker")
     void invokeAsyncUsesCircuitBreaker() {
-        adapter = new LambdaAdapter(lambdaClient, CircuitBreaker.ofDefaults("lambda"));
+        adapter = new LambdaAdapter(lambdaClient, TestGuards.permissive());
 
         InvokeResponse mockResponse = InvokeResponse.builder().statusCode(202).build();
         when(lambdaClient.invoke(any(InvokeRequest.class)))

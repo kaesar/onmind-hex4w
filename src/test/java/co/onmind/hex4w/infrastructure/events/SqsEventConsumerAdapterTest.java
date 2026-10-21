@@ -52,7 +52,8 @@ class SqsEventConsumerAdapterTest {
                 eventPublisher,
                 objectMapper,
                 "https://sqs.us-east-1.amazonaws.com/123/commands",
-                "https://sqs.us-east-1.amazonaws.com/123/results"
+                "https://sqs.us-east-1.amazonaws.com/123/results",
+                120
         );
     }
 
@@ -156,6 +157,8 @@ class SqsEventConsumerAdapterTest {
         RuntimeException error = new RuntimeException("Script failed");
         when(executeScriptTrait.executeScript("hello.js"))
                 .thenReturn(Mono.error(error));
+        when(sqsClient.deleteMessage(any(DeleteMessageRequest.class)))
+                .thenReturn(CompletableFuture.completedFuture(null));
 
         StepVerifier.create(adapter.processMessage(message))
                 .verifyComplete();
@@ -165,8 +168,10 @@ class SqsEventConsumerAdapterTest {
                 eq("corr-2"),
                 any(String.class)
         );
-        // Should NOT delete message on execution failure (allows reprocessing)
-        verify(sqsClient, never()).deleteMessage(any(DeleteMessageRequest.class));
+        // The message is consumed: leaving it in the queue would make it reappear after
+        // the visibility timeout and run the script again, forever. Automatic retries
+        // are the job of an SQS redrive policy (DLQ).
+        verify(sqsClient).deleteMessage(any(DeleteMessageRequest.class));
     }
 
     @Test

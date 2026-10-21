@@ -2,7 +2,7 @@ package co.onmind.hex4w.infrastructure.storage;
 
 import co.onmind.hex4w.application.ports.out.StorePort;
 import co.onmind.hex4w.domain.models.StoreItem;
-import co.onmind.hex4w.transverse.resilience.CircuitBreakerGeneric;
+import co.onmind.hex4w.transverse.resilience.OutboundGuard;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,11 +21,11 @@ public class S3StoreAdapter implements StorePort {
     private static final Logger logger = LoggerFactory.getLogger(S3StoreAdapter.class);
 
     private final S3AsyncClient s3Client;
-    private final CircuitBreaker circuitBreaker;
+    private final OutboundGuard guard;
 
-    public S3StoreAdapter(S3AsyncClient s3Client, CircuitBreaker s3CircuitBreaker) {
+    public S3StoreAdapter(S3AsyncClient s3Client, OutboundGuard s3Guard) {
         this.s3Client = s3Client;
-        this.circuitBreaker = s3CircuitBreaker;
+        this.guard = s3Guard;
     }
 
     @Override
@@ -34,10 +34,8 @@ public class S3StoreAdapter implements StorePort {
                 .bucket(bucket)
                 .build();
 
-        return CircuitBreakerGeneric.withCircuitBreaker(
-                Flux.from(s3Client.listObjectsV2Paginator(request).contents())
-                        .map(this::toStoreItem),
-                circuitBreaker);
+        return guard.transform(Flux.from(s3Client.listObjectsV2Paginator(request).contents())
+                .map(this::toStoreItem));
     }
 
     private StoreItem toStoreItem(S3Object s3Object) {

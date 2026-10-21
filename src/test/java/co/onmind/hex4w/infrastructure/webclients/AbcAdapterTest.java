@@ -1,8 +1,8 @@
 package co.onmind.hex4w.infrastructure.webclients;
 
+import co.onmind.hex4w.transverse.resilience.TestGuards;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,13 +23,11 @@ class AbcAdapterTest {
     @Mock
     AbcWebClient abcWebClient;
 
-    private CircuitBreaker circuitBreaker;
     private AbcAdapter adapter;
 
     @BeforeEach
     void setUp() {
-        circuitBreaker = CircuitBreaker.ofDefaults("abc");
-        adapter = new AbcAdapter(abcWebClient, circuitBreaker);
+        adapter = new AbcAdapter(abcWebClient, TestGuards.permissive());
     }
 
     @Test

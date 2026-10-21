@@ -3,8 +3,7 @@ package co.onmind.hex4w.infrastructure.webclients;
 import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import co.onmind.hex4w.transverse.resilience.CircuitBreakerGeneric;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import co.onmind.hex4w.transverse.resilience.OutboundGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
@@ -20,22 +19,22 @@ public class AbcAdapter implements AbcPort {
     private static final Logger logger = LoggerFactory.getLogger(AbcAdapter.class);
 
     private final AbcWebClient abcWebClient;
-    private final CircuitBreaker circuitBreaker;
+    private final OutboundGuard guard;
 
-    public AbcAdapter(AbcWebClient abcWebClient, CircuitBreaker abcCircuitBreaker) {
+    public AbcAdapter(AbcWebClient abcWebClient, OutboundGuard abcGuard) {
         this.abcWebClient = abcWebClient;
-        this.circuitBreaker = abcCircuitBreaker;
+        this.guard = abcGuard;
     }
 
     @Override
     public Mono<AbcResponse> sheet(String show, String from, String some) {
         logger.debug("AbcAdapter.sheet: show={}", show);
-        return CircuitBreakerGeneric.withCircuitBreaker(abcWebClient.sheet(show, from, some), circuitBreaker);
+        return guard.transform(abcWebClient.sheet(show, from, some));
     }
 
     @Override
     public Mono<AbcResponse> exec(AbcRequest request) {
         logger.debug("AbcAdapter.exec: what={}, from={}", request.what(), request.from());
-        return CircuitBreakerGeneric.withCircuitBreaker(abcWebClient.ask(request), circuitBreaker);
+        return guard.transform(abcWebClient.ask(request));
     }
 }

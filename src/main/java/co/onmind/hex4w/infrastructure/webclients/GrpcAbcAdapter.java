@@ -4,9 +4,8 @@ import co.onmind.grpc.proto.AbcServiceGrpc;
 import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcRequest;
 import co.onmind.hex4w.infrastructure.webclients.dto.AbcResponse;
-import co.onmind.hex4w.transverse.resilience.CircuitBreakerGeneric;
+import co.onmind.hex4w.transverse.resilience.OutboundGuard;
 import tools.jackson.databind.json.JsonMapper;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,13 +26,13 @@ public class GrpcAbcAdapter implements AbcPort {
     private static final Logger logger = LoggerFactory.getLogger(GrpcAbcAdapter.class);
 
     private final AbcServiceGrpc.AbcServiceStub stub;
-    private final CircuitBreaker circuitBreaker;
+    private final OutboundGuard guard;
     private final JsonMapper objectMapper;
 
     public GrpcAbcAdapter(AbcServiceGrpc.AbcServiceStub stub,
-                          CircuitBreaker abcCircuitBreaker, JsonMapper objectMapper) {
+                          OutboundGuard abcGuard, JsonMapper objectMapper) {
         this.stub = stub;
-        this.circuitBreaker = abcCircuitBreaker;
+        this.guard = abcGuard;
         this.objectMapper = objectMapper;
     }
 
@@ -49,7 +48,7 @@ public class GrpcAbcAdapter implements AbcPort {
         co.onmind.grpc.proto.AbcRequest grpcRequest = toGrpcRequest(httpRequest);
         logger.debug("XDB gRPC sheet request: from={}, some={}", httpRequest.from(), httpRequest.some());
 
-        return CircuitBreakerGeneric.withCircuitBreaker(callExecute(grpcRequest), circuitBreaker)
+        return guard.transform(callExecute(grpcRequest))
             .doOnSuccess(r -> logger.debug("XDB gRPC sheet response: ok={}, total={}", r.ok(), r.total()));
     }
 
@@ -58,7 +57,7 @@ public class GrpcAbcAdapter implements AbcPort {
         co.onmind.grpc.proto.AbcRequest grpcRequest = toGrpcRequest(request);
         logger.debug("XDB gRPC exec request: what={}, from={}", request.what(), request.from());
 
-        return CircuitBreakerGeneric.withCircuitBreaker(callExecute(grpcRequest), circuitBreaker)
+        return guard.transform(callExecute(grpcRequest))
             .doOnSuccess(r -> logger.debug("XDB gRPC exec response: ok={}, status={}", r.ok(), r.status()));
     }
 

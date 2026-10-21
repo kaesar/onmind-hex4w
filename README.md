@@ -4,8 +4,8 @@ App template for Spring WebFlux with Hexagonal Architecture (Ports & Adapters), 
 
 ## Prerequisites
 
-- Java 21+ (Temurin, Corretto, etc.)
-- Gradle 8.7+ (wrapper included)
+- Java 25+ (Temurin, Corretto, GraalVM, etc.)
+- Gradle 9+ (wrapper included)
 
 ## Quick Start
 
@@ -55,8 +55,10 @@ transverse/      # Cross-cutting: global error handler, reactive logging
 ```
 
 - **Reactive end-to-end**: `Mono`/`Flux`, RouterFunction handlers, R2DBC
-- **Hexagonal**: Domain isolated; infrastructure implements ports
+- **Hexagonal**: Domain isolated, infrastructure implements ports
 - **Script sandbox**: GraalJS with no host/IO/thread access
+- **Resilience**: circuit breaker, bulkhead and rate limiter composed per outbound dependency
+- **Event consumers**: Kafka, RabbitMQ and SQS with explicit delivery semantics
 
 ## Testing
 
@@ -68,7 +70,8 @@ transverse/      # Cross-cutting: global error handler, reactive logging
 ## Documentation
 
 - **English**: this file
-- **Español**: [HELP.md](./HELP.md) — detailed architecture, API, testing, extension guide
+- **Español**: [HELP.md](./HELP.md) — detailed architecture, configuration of every adapter
+  (Kafka, SQS, RabbitMQ, SNS, EventBridge, Redis, gRPC), resilience, testing and extension guide
 
 ## License
 

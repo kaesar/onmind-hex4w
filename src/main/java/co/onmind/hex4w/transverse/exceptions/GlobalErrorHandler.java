@@ -3,6 +3,8 @@ package co.onmind.hex4w.transverse.exceptions;
 import co.onmind.hex4w.domain.exceptions.DuplicateRoleException;
 import co.onmind.hex4w.domain.exceptions.RoleNotFoundException;
 import co.onmind.hex4w.domain.exceptions.ScriptNotAllowedException;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
@@ -136,6 +138,16 @@ public class GlobalErrorHandler implements ErrorWebExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 "INVALID_JSON",
                 "Invalid JSON format in request body"
+            );
+            case BulkheadFullException bulkheadEx -> new ErrorDetails(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "SERVICE_OVERLOADED",
+                "The downstream service is temporarily unavailable, please retry later."
+            );
+            case RequestNotPermitted rateEx -> new ErrorDetails(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "SERVICE_OVERLOADED",
+                "The downstream service is temporarily unavailable, please retry later."
             );
             default -> new ErrorDetails(
                 HttpStatus.INTERNAL_SERVER_ERROR,

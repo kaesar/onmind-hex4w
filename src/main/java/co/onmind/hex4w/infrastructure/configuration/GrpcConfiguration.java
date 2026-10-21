@@ -5,13 +5,14 @@ import co.onmind.hex4w.application.ports.out.AbcPort;
 import co.onmind.hex4w.application.ports.out.CachePort;
 import co.onmind.hex4w.infrastructure.webclients.CachedAbcAdapter;
 import co.onmind.hex4w.infrastructure.webclients.GrpcAbcAdapter;
+import co.onmind.hex4w.transverse.resilience.OutboundGuard;
 import tools.jackson.databind.json.JsonMapper;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.AbstractStub;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,11 +53,11 @@ public class GrpcConfiguration {
     @Primary
     public AbcPort grpcAbcPort(
             AbcServiceGrpc.AbcServiceStub grpcStub,
-            CircuitBreaker abcCircuitBreaker,
+            @Qualifier("abcGuard") OutboundGuard abcGuard,
             CachePort cachePort,
             JsonMapper objectMapper,
             @Value("${app.xdb.cache.ttl-seconds:300}") int ttlSeconds) {
-        GrpcAbcAdapter grpcAdapter = new GrpcAbcAdapter(grpcStub, abcCircuitBreaker, objectMapper);
+        GrpcAbcAdapter grpcAdapter = new GrpcAbcAdapter(grpcStub, abcGuard, objectMapper);
         return new CachedAbcAdapter(grpcAdapter, cachePort, objectMapper,
                 Duration.ofSeconds(ttlSeconds));
     }

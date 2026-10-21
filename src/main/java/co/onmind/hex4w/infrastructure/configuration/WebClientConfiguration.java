@@ -13,13 +13,12 @@ import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
+import reactor.netty.resources.ConnectionProvider;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.lambda.LambdaAsyncClient;
+import software.amazon.awssdk.services.sqs.SqsAsyncClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import io.github.resilience4j.circuitbreaker.CircuitBreaker;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
-import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 
 import java.net.URI;
 import java.time.Duration;
@@ -68,20 +67,30 @@ public class WebClientConfiguration {
     
     @Value("${app.webclient.max-memory-size:1048576}")
     private int maxMemorySize;
-    
+
+    @Value("${app.webclient.max-connections:100}")
+    private int maxConnections;
+
+    @Value("${app.webclient.pending-acquire-max-count:100}")
+    private int pendingAcquireMaxCount;
+
+    @Value("${app.webclient.pending-acquire-timeout:2000}")
+    private long pendingAcquireTimeout;
+
     /**
      * Creates a default WebClient bean for general HTTP communications.
-     * 
+     *
      * This WebClient is configured with appropriate timeouts, connection pooling,
      * and logging for making HTTP calls to external services. It includes
      * request/response logging and error handling.
-     * 
+     *
+     * @param connectionProvider the shared Reactor Netty connection pool
      * @return a configured WebClient instance
      */
     @Bean
-    public WebClient webClient() {
+    public WebClient webClient(ConnectionProvider connectionProvider) {
         return WebClient.builder()
-            .clientConnector(createClientConnector())
+            .clientConnector(createClientConnector(connectionProvider))
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxMemorySize))
             .filter(logRequest())
             .filter(logResponse())
@@ -101,22 +110,44 @@ public class WebClientConfiguration {
     }
 
     /**
+     * Creates the Reactor Netty connection pool shared by every {@code WebClient}.
+     * <p>
+     * The Reactor Netty defaults are {@code maxConnections = max(availableProcessors, 8) * 2}
+     * and {@code pendingAcquireMaxCount = 256} with a {@code pendingAcquireTimeout} of 45
+     * seconds. The last part is the problem: the excess requests are <em>queued</em> for
+     * up to 45 seconds instead of being rejected, so a burst against a slow downstream
+     * turns into a latency pile-up rather than into a fast failure. The bulkhead of the
+     * {@code OutboundGuard} rejects the traffic that should not be sent at all; this pool
+     * is the last line of defence for whatever gets past it.
+     *
+     * @return the connection provider
+     */
+    @Bean
+    public ConnectionProvider connectionProvider() {
+        return ConnectionProvider.builder("hex4w")
+            .maxConnections(maxConnections)
+            .pendingAcquireMaxCount(pendingAcquireMaxCount)
+            .pendingAcquireTimeout(Duration.ofMillis(pendingAcquireTimeout))
+            .build();
+    }
+
+    /**
      * Creates a ReactorClientHttpConnector with custom HTTP client configuration.
-     * 
+     *
      * This method configures the underlying HTTP client with appropriate
      * timeouts, connection pooling, and other performance optimizations.
-     * 
+     *
      * @return a configured ReactorClientHttpConnector
      */
-    private ReactorClientHttpConnector createClientConnector() {
-        HttpClient httpClient = HttpClient.create()
+    private ReactorClientHttpConnector createClientConnector(ConnectionProvider connectionProvider) {
+        HttpClient httpClient = HttpClient.create(connectionProvider)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
             .responseTimeout(Duration.ofMillis(readTimeout))
-            .doOnConnected(conn -> 
+            .doOnConnected(conn ->
                 conn.addHandlerLast(new ReadTimeoutHandler(readTimeout, TimeUnit.MILLISECONDS))
                     .addHandlerLast(new WriteTimeoutHandler(writeTimeout, TimeUnit.MILLISECONDS))
             );
-        
+
         return new ReactorClientHttpConnector(httpClient);
     }
     
@@ -210,10 +241,11 @@ public class WebClientConfiguration {
      * @return a configured WebClient for XDB
      */
     @Bean
-    public WebClient xdbWebClient(@Value("${app.xdb.base-url:http://localhost:8082}") String baseUrl) {
+    public WebClient xdbWebClient(ConnectionProvider connectionProvider,
+            @Value("${app.xdb.base-url:http://localhost:8082}") String baseUrl) {
         return WebClient.builder()
             .baseUrl(baseUrl)
-            .clientConnector(createClientConnector())
+            .clientConnector(createClientConnector(connectionProvider))
             .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(maxMemorySize))
             .filter(logRequest())
             .filter(logResponse())
@@ -253,8 +285,9 @@ public class WebClientConfiguration {
     @org.springframework.context.annotation.Profile("!grpc")
     public co.onmind.hex4w.infrastructure.webclients.AbcAdapter abcAdapter(
             co.onmind.hex4w.infrastructure.webclients.AbcWebClient abcWebClient,
-            CircuitBreaker abcCircuitBreaker) {
-        return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient, abcCircuitBreaker);
+            @org.springframework.beans.factory.annotation.Qualifier("abcGuard")
+            co.onmind.hex4w.transverse.resilience.OutboundGuard abcGuard) {
+        return new co.onmind.hex4w.infrastructure.webclients.AbcAdapter(abcWebClient, abcGuard);
     }
 
     @Bean
@@ -306,29 +339,21 @@ public class WebClientConfiguration {
         return builder.build();
     }
 
-    private static CircuitBreakerConfig createCircuitBreakerConfig() {
-        return CircuitBreakerConfig.custom()
-                .failureRateThreshold(50)
-                .slidingWindowSize(10)
-                .minimumNumberOfCalls(5)
-                .waitDurationInOpenState(java.time.Duration.ofSeconds(30))
-                .permittedNumberOfCallsInHalfOpenState(3)
-                .build();
-    }
-
     @Bean
-    public CircuitBreaker abcCircuitBreaker() {
-        return CircuitBreaker.of("abc", createCircuitBreakerConfig());
-    }
+    @org.springframework.context.annotation.Profile("sqs")
+    public SqsAsyncClient sqsAsyncClient(
+            @Value("${app.aws.region:us-east-1}") String region,
+            @Value("${app.aws.endpoint:#{null}}") String endpoint) {
 
-    @Bean
-    public CircuitBreaker lambdaCircuitBreaker() {
-        return CircuitBreaker.of("lambda", createCircuitBreakerConfig());
-    }
+        var builder = SqsAsyncClient.builder()
+                .region(Region.of(region))
+                .credentialsProvider(DefaultCredentialsProvider.create());
 
-    @Bean
-    public CircuitBreaker s3CircuitBreaker() {
-        return CircuitBreaker.of("s3", createCircuitBreakerConfig());
+        if (endpoint != null && !endpoint.isBlank()) {
+            builder.endpointOverride(URI.create(endpoint));
+        }
+
+        return builder.build();
     }
 
     /**

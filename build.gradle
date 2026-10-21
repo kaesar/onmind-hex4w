@@ -5,13 +5,17 @@ plugins {
     id 'jacoco'
 }
 
+// Boot 4.1.1 manages Jackson 3.1.5, which carries CVE-2026-110879.
+// Overridden to 3.1.8, the LTS patch line within the same minor.
+ext['jackson-bom.version'] = '3.1.8'
+
 group = 'co.onmind'
-version = '0.0.1-SNAPSHOT'
+version = '0.17.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = '21'
+    sourceCompatibility = '25'
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -25,6 +29,8 @@ repositories {
     mavenCentral()
     maven { url 'https://repo1.maven.org/maven2' }
 }
+
+def xdbJar = file('../../../api/xdb/build/libs/onmind-xdb-1.0.0-early2026.jar')
 
 dependencies {
     // Spring Boot WebFlux
@@ -51,9 +57,11 @@ dependencies {
     implementation 'software.amazon.awssdk:lambda'
     implementation 'software.amazon.awssdk:netty-nio-client'
 
-    // GraalVM Polyglot SDK for sandboxed JavaScript execution
-    implementation 'org.graalvm.polyglot:polyglot:24.1.1'
-    implementation 'org.graalvm.polyglot:js:24.1.1'
+    // GraalVM Polyglot SDK for sandboxed JavaScript execution.
+    // 25.x is required: the 24.x line reads HotSpot internals that changed in JDK 25
+    // (jdk.vm.ci.services.Services.IS_BUILDING_NATIVE_IMAGE) and GraalJS fails to start.
+    implementation 'org.graalvm.polyglot:polyglot:25.0.5'
+    implementation 'org.graalvm.polyglot:js:25.0.5'
 
     // Kafka (optional — activate with profile 'kafka')
     implementation 'org.springframework.kafka:spring-kafka'
@@ -66,8 +74,10 @@ dependencies {
     implementation 'io.grpc:grpc-protobuf:1.69.1'
     implementation 'io.grpc:grpc-stub:1.69.1'
     implementation 'com.google.protobuf:protobuf-java:3.25.5'
-    // xdb JAR provides gRPC proto-generated classes (AbcServiceGrpc, AbcRequest, AbcResponse)
-    implementation files('../../../api/xdb/build/libs/onmind-xdb-1.0.0-early2026.jar')
+    if (xdbJar.exists()) {
+        // xdb JAR provides gRPC proto-generated classes (AbcServiceGrpc, AbcRequest, AbcResponse)
+        implementation files(xdbJar)
+    }
 
     // Redis (reactive) for caching layer
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
@@ -78,9 +88,14 @@ dependencies {
     // Spring for GraphQL (BFF endpoint exposing /abc as GraphQL)
     implementation 'org.springframework.boot:spring-boot-starter-graphql'
     
-    // Resilience4j — Circuit Breaker and Retry for reactive adapters
+    // Resilience4j — Circuit Breaker, Bulkhead and Rate Limiter for the reactive adapters.
+    // The bulkhead and the rate limiter bound how much traffic reaches a downstream:
+    // without them the only limit is the Reactor Netty connection pool, which queues
+    // the excess instead of rejecting it.
     implementation 'io.github.resilience4j:resilience4j-reactor:2.2.0'
     implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-bulkhead:2.2.0'
+    implementation 'io.github.resilience4j:resilience4j-ratelimiter:2.2.0'
 
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok'
@@ -94,6 +109,26 @@ dependencies {
     testImplementation 'org.mockito:mockito-core'
     testImplementation 'org.mockito:mockito-junit-jupiter'
     testImplementation 'org.assertj:assertj-core'
+}
+
+sourceSets {
+    main {
+        java {
+            if (!xdbJar.exists()) {
+                // gRPC proto classes unavailable — skip the gRPC sources so the default
+                // build stays green. Enable by providing the xdb JAR.
+                exclude 'co/onmind/hex4w/infrastructure/webclients/GrpcAbcAdapter.java'
+                exclude 'co/onmind/hex4w/infrastructure/configuration/GrpcConfiguration.java'
+            }
+        }
+    }
+    test {
+        java {
+            if (!xdbJar.exists()) {
+                exclude 'co/onmind/hex4w/infrastructure/webclients/GrpcAbcAdapterTest.java'
+            }
+        }
+    }
 }
 
 tasks.named('test') {
